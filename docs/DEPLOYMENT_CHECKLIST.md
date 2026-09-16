@@ -154,7 +154,18 @@ The script:
 
 It does **not** fund the account and does not move user assets.
 
-Record the CL Account address and run `npm run preflight` one final time.
+Set `CL_ACCOUNT` to the emitted account address and `CL_ACCOUNT_OWNER` to the owner wallet.
+
+Now verify the entire configured account without broadcasting anything:
+
+```bash
+forge script script/VerifyDemoDeployment.s.sol:VerifyDemoDeployment \
+  --rpc-url "$MONAD_MAINNET_RPC" -vvvv
+```
+
+The verifier checks owner, risk guard, defensive executor, current registry versions, adapter authorization, risk coverage and allowed assets. Do not fund the account until it passes.
+
+Run `npm run preflight` one final time.
 
 ## 8. Funded smoke test
 
@@ -209,19 +220,28 @@ Verify both are configured for chain `143` and the exact same deployed CL contra
 
 ## 11. Final evidence bundle
 
-Create a deployment manifest under `deployments/` containing:
+Populate the `DEMO_TX_*` fields in your local environment using only confirmed transaction hashes and set `GIT_COMMIT_SHA` to the final green commit.
+
+Generate the manifest:
+
+```bash
+npm run evidence
+```
+
+This writes `deployments/monad-mainnet.json` containing:
 
 - chain ID (`143`)
-- deployment timestamp/block
+- generation time
 - all CL contract addresses
 - all adapter addresses
 - Kuru / Perpl / Euler execution targets
 - tracked markets / perp IDs / vaults
 - oracle sources
-- registry adapter versions
-- CL Account address
-- demo transaction hashes
+- CL Account + owner
+- funded demo transaction hashes
 - final CI commit SHA
+
+Review it before committing it to the repository.
 
 No deployment may be described as live/complete until every funded transaction is confirmed on Monad mainnet.
 
