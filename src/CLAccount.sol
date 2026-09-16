@@ -25,6 +25,7 @@ contract CLAccount is ReentrancyGuard {
     mapping(address adapter => bool authorized) public authorizedAdapter;
     mapping(address adapter => uint64 version) public authorizedAdapterVersion;
     mapping(address asset => bool allowed) public allowedAsset;
+    mapping(address operator => bool authorized) public defensiveOperator;
 
     error Unauthorized();
     error ZeroAddress();
@@ -33,6 +34,8 @@ contract CLAccount is ReentrancyGuard {
     error AdapterNotAuthorized();
     error AdapterAuthorizationStale();
     error AdapterNotRiskCovered();
+    error DefensiveOperatorNotAuthorized();
+    error RiskGuardRequired();
     error TargetNotAllowed();
     error AssetNotAllowed();
     error InsufficientNativeBalance();
@@ -42,12 +45,14 @@ contract CLAccount is ReentrancyGuard {
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event PauseChanged(bool paused);
     event RiskGuardChanged(address indexed guard, bool enabled);
+    event DefensiveOperatorChanged(address indexed operator, bool authorized);
     event AdapterAuthorizationChanged(address indexed adapter, bool authorized, uint64 registryVersion);
     event AssetPermissionChanged(address indexed asset, bool allowed);
     event Deposited(address indexed asset, address indexed from, uint256 amount);
     event Withdrawn(address indexed asset, address indexed to, uint256 amount);
     event AdapterExecuted(address indexed adapter, bytes32 indexed protocolId, uint256 callCount);
     event BatchExecuted(uint256 adapterActionCount, uint256 lowLevelCallCount);
+    event DefensiveBatchExecuted(address indexed operator, uint256 adapterActionCount, uint256 lowLevelCallCount);
     event CallExecuted(address indexed adapter, uint256 indexed index, address indexed target, uint256 value, bytes4 selector);
     event RiskTransitionValidated(address indexed guard);
 
@@ -92,6 +97,15 @@ contract CLAccount is ReentrancyGuard {
         riskGuard = IRiskGuard(guard);
         riskGuardEnabled = enabled;
         emit RiskGuardChanged(guard, enabled);
+    }
+
+    /// @notice Authorize a contract to submit strictly risk-reducing adapter batches.
+    /// @dev Operators can never withdraw from CLAccount and every operator batch must pass
+    ///      `validateRiskReduction` atomically after all protocol calls.
+    function setDefensiveOperator(address operator, bool authorized) external onlyOwner {
+        if (operator == address(0)) revert ZeroAddress();
+        defensiveOperator[operator] = authorized;
+        emit DefensiveOperatorChanged(operator, authorized);
     }
 
     function setAssetAllowed(address asset, bool allowed) external onlyOwner {
@@ -151,14 +165,42 @@ contract CLAccount is ReentrancyGuard {
         returns (bytes[][] memory results)
     {
         bytes memory beforeRisk = _captureRisk();
-        results = new bytes[][](actions.length);
         uint256 lowLevelCalls;
+        (results, lowLevelCalls) = _executeBatch(actions);
+        _enforceRisk(beforeRisk);
+        emit BatchExecuted(actions.length, lowLevelCalls);
+    }
+
+    /// @notice Delegated emergency/automation path. The final state must be strictly safer.
+    /// @dev This intentionally uses a stronger condition than normal owner execution. A keeper or
+    ///      automation contract cannot make a merely policy-compliant trade; it must reduce risk.
+    function executeDefensiveBatch(CLTypes.AdapterAction[] calldata actions)
+        external
+        whenNotPaused
+        nonReentrant
+        returns (bytes[][] memory results)
+    {
+        if (!defensiveOperator[msg.sender]) revert DefensiveOperatorNotAuthorized();
+        if (!riskGuardEnabled || address(riskGuard) == address(0)) revert RiskGuardRequired();
+
+        bytes memory beforeRisk = riskGuard.capture(address(this));
+        uint256 lowLevelCalls;
+        (results, lowLevelCalls) = _executeBatch(actions);
+
+        (bool ok, bytes32 reason) = riskGuard.validateRiskReduction(address(this), beforeRisk);
+        if (!ok) revert RiskPolicyViolation(reason);
+        emit DefensiveBatchExecuted(msg.sender, actions.length, lowLevelCalls);
+    }
+
+    function _executeBatch(CLTypes.AdapterAction[] calldata actions)
+        internal
+        returns (bytes[][] memory results, uint256 lowLevelCalls)
+    {
+        results = new bytes[][](actions.length);
         for (uint256 i; i < actions.length; ++i) {
             results[i] = _executeAdapter(actions[i].adapter, actions[i].action, lowLevelCalls);
             lowLevelCalls += results[i].length;
         }
-        _enforceRisk(beforeRisk);
-        emit BatchExecuted(actions.length, lowLevelCalls);
     }
 
     function _executeAdapter(address adapter, bytes calldata action, uint256 globalOffset)
