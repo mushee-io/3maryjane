@@ -31,53 +31,65 @@ contract VerifyDemoDeployment {
 
     function run() external {
         address accountAddress = vm.envAddress("CL_ACCOUNT");
+        _verifyAccount(accountAddress);
+        _verifyAdapters(accountAddress);
+        _verifyAssets(accountAddress);
+        emit DeploymentVerified(accountAddress, vm.envAddress("CL_ACCOUNT_OWNER"), 3, 4);
+    }
+
+    function _verifyAccount(address accountAddress) internal view {
+        CLAccount account = CLAccount(payable(accountAddress));
         address expectedOwner = vm.envAddress("CL_ACCOUNT_OWNER");
         address policyManagerAddress = vm.envAddress("CL_RISK_POLICY_MANAGER");
         address defensiveExecutor = vm.envAddress("CL_DEFENSIVE_EXECUTOR");
 
-        address kuruAdapter = vm.envAddress("KURU_ADAPTER");
-        address perplAdapter = vm.envAddress("PERPL_ADAPTER");
-        address eulerAdapter = vm.envAddress("EULER_ADAPTER");
-        address walletBalanceAdapter = vm.envAddress("WALLET_BALANCE_ADAPTER");
-        address[] memory allowedAssets = vm.envAddress("CL_ALLOWED_ASSETS", ",");
+        address actualOwner = account.owner();
+        if (actualOwner != expectedOwner) revert OwnerMismatch(actualOwner, expectedOwner);
+        if (!account.riskGuardEnabled()) revert RiskGuardDisabled();
+        address actualGuard = address(account.riskGuard());
+        if (actualGuard != policyManagerAddress) revert RiskGuardMismatch(actualGuard, policyManagerAddress);
+        if (!account.defensiveOperator(defensiveExecutor)) revert DefensiveOperatorMissing(defensiveExecutor);
+    }
 
+    function _verifyAdapters(address accountAddress) internal view {
         CLAccount account = CLAccount(payable(accountAddress));
         AdapterRegistry registry = AdapterRegistry(address(account.registry()));
-        RiskPolicyManager policyManager = RiskPolicyManager(policyManagerAddress);
+        RiskPolicyManager policyManager = RiskPolicyManager(vm.envAddress("CL_RISK_POLICY_MANAGER"));
 
-        if (account.owner() != expectedOwner) revert OwnerMismatch(account.owner(), expectedOwner);
-        if (!account.riskGuardEnabled()) revert RiskGuardDisabled();
-        if (address(account.riskGuard()) != policyManagerAddress) {
-            revert RiskGuardMismatch(address(account.riskGuard()), policyManagerAddress);
-        }
-        if (!account.defensiveOperator(defensiveExecutor)) revert DefensiveOperatorMissing(defensiveExecutor);
+        _verifyExecutableAdapter(accountAddress, account, registry, policyManager, vm.envAddress("KURU_ADAPTER"));
+        _verifyExecutableAdapter(accountAddress, account, registry, policyManager, vm.envAddress("PERPL_ADAPTER"));
+        _verifyExecutableAdapter(accountAddress, account, registry, policyManager, vm.envAddress("EULER_ADAPTER"));
 
-        address[] memory executableAdapters = new address[](3);
-        executableAdapters[0] = kuruAdapter;
-        executableAdapters[1] = perplAdapter;
-        executableAdapters[2] = eulerAdapter;
-
-        for (uint256 i = 0; i < executableAdapters.length; ++i) {
-            address adapter = executableAdapters[i];
-            if (!registry.isAdapterActive(adapter)) revert AdapterInactive(adapter);
-            if (!account.authorizedAdapter(adapter)) revert AdapterUnauthorized(adapter);
-            uint64 accountVersion = account.authorizedAdapterVersion(adapter);
-            uint64 registryVersion = registry.adapterVersion(adapter);
-            if (accountVersion != registryVersion) {
-                revert AdapterAuthorizationStale(adapter, accountVersion, registryVersion);
-            }
-            if (!policyManager.isAdapterCovered(accountAddress, adapter)) revert AdapterNotRiskCovered(adapter);
-        }
-
-        // WalletBalanceAdapter is intentionally read-only, so it is risk-covered without execution authorization.
+        address walletBalanceAdapter = vm.envAddress("WALLET_BALANCE_ADAPTER");
         if (!policyManager.isAdapterCovered(accountAddress, walletBalanceAdapter)) {
             revert AdapterNotRiskCovered(walletBalanceAdapter);
         }
+    }
 
+    function _verifyExecutableAdapter(
+        address accountAddress,
+        CLAccount account,
+        AdapterRegistry registry,
+        RiskPolicyManager policyManager,
+        address adapter
+    ) internal view {
+        if (!registry.isAdapterActive(adapter)) revert AdapterInactive(adapter);
+        if (!account.authorizedAdapter(adapter)) revert AdapterUnauthorized(adapter);
+
+        uint64 accountVersion = account.authorizedAdapterVersion(adapter);
+        uint64 registryVersion = registry.adapterVersion(adapter);
+        if (accountVersion != registryVersion) {
+            revert AdapterAuthorizationStale(adapter, accountVersion, registryVersion);
+        }
+
+        if (!policyManager.isAdapterCovered(accountAddress, adapter)) revert AdapterNotRiskCovered(adapter);
+    }
+
+    function _verifyAssets(address accountAddress) internal view {
+        CLAccount account = CLAccount(payable(accountAddress));
+        address[] memory allowedAssets = vm.envAddress("CL_ALLOWED_ASSETS", ",");
         for (uint256 i = 0; i < allowedAssets.length; ++i) {
             if (!account.allowedAsset(allowedAssets[i])) revert AssetNotAllowed(allowedAssets[i]);
         }
-
-        emit DeploymentVerified(accountAddress, expectedOwner, executableAdapters.length, 4);
     }
 }
