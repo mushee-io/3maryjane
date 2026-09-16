@@ -99,7 +99,8 @@ contract RiskRegistry {
 
     function priceE18(address asset) public view returns (uint256 price) {
         RiskTypes.AssetConfig memory config = requireAssetConfig(asset);
-        (price, uint256 updatedAt) = IPriceSource(config.priceSource).latestPriceE18();
+        uint256 updatedAt;
+        (price, updatedAt) = IPriceSource(config.priceSource).latestPriceE18();
         if (price == 0 || updatedAt == 0 || updatedAt > block.timestamp) revert InvalidPrice(asset);
         if (block.timestamp - updatedAt > config.maxStaleness) revert StalePrice(asset, updatedAt);
     }
