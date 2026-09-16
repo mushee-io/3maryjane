@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {IAdapterRegistry} from "./interfaces/IAdapterRegistry.sol";
 import {ICLAdapter} from "./interfaces/ICLAdapter.sol";
+import {IRiskGuard} from "./interfaces/IRiskGuard.sol";
 import {CLTypes} from "./types/CLTypes.sol";
 import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
 import {ReentrancyGuard} from "./libraries/ReentrancyGuard.sol";
@@ -10,12 +11,15 @@ import {ReentrancyGuard} from "./libraries/ReentrancyGuard.sol";
 /// @title CLAccount
 /// @notice User-owned clearing account. Protocol positions are opened from this address.
 /// @dev Adapters build execution plans; this account performs each call directly, preserving
-///      custody and protocol position ownership at the account address.
+///      custody and protocol position ownership at the account address. When a risk guard is
+///      enabled, every protocol transition is validated after execution and before commit.
 contract CLAccount is ReentrancyGuard {
     using SafeTransferLib for address;
 
     address public owner;
     IAdapterRegistry public immutable registry;
+    IRiskGuard public riskGuard;
+    bool public riskGuardEnabled;
     bool public paused;
 
     mapping(address adapter => bool authorized) public authorizedAdapter;
@@ -28,13 +32,16 @@ contract CLAccount is ReentrancyGuard {
     error AdapterInactive();
     error AdapterNotAuthorized();
     error AdapterAuthorizationStale();
+    error AdapterNotRiskCovered();
     error TargetNotAllowed();
     error AssetNotAllowed();
     error InsufficientNativeBalance();
+    error RiskPolicyViolation(bytes32 reason);
     error ExternalCallFailed(uint256 index, address target, bytes reason);
 
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event PauseChanged(bool paused);
+    event RiskGuardChanged(address indexed guard, bool enabled);
     event AdapterAuthorizationChanged(address indexed adapter, bool authorized, uint64 registryVersion);
     event AssetPermissionChanged(address indexed asset, bool allowed);
     event Deposited(address indexed asset, address indexed from, uint256 amount);
@@ -42,6 +49,7 @@ contract CLAccount is ReentrancyGuard {
     event AdapterExecuted(address indexed adapter, bytes32 indexed protocolId, uint256 callCount);
     event BatchExecuted(uint256 adapterActionCount, uint256 lowLevelCallCount);
     event CallExecuted(address indexed adapter, uint256 indexed index, address indexed target, uint256 value, bytes4 selector);
+    event RiskTransitionValidated(address indexed guard);
 
     constructor(address initialOwner, address registry_) {
         if (initialOwner == address(0) || registry_ == address(0)) revert ZeroAddress();
@@ -77,6 +85,15 @@ contract CLAccount is ReentrancyGuard {
         emit PauseChanged(state);
     }
 
+    /// @notice Install or disable transaction-level portfolio risk enforcement.
+    /// @dev Enabling a guard does not surrender ownership; the owner can replace/disable it.
+    function setRiskGuard(address guard, bool enabled) external onlyOwner {
+        if (enabled && guard == address(0)) revert ZeroAddress();
+        riskGuard = IRiskGuard(guard);
+        riskGuardEnabled = enabled;
+        emit RiskGuardChanged(guard, enabled);
+    }
+
     function setAssetAllowed(address asset, bool allowed) external onlyOwner {
         allowedAsset[asset] = allowed;
         emit AssetPermissionChanged(asset, allowed);
@@ -99,12 +116,16 @@ contract CLAccount is ReentrancyGuard {
 
     function withdraw(address asset, address to, uint256 amount) external onlyOwner nonReentrant {
         if (to == address(0)) revert ZeroAddress();
+        bytes memory beforeRisk = _captureRisk();
+
         if (asset == address(0)) {
             (bool ok,) = to.call{value: amount}("");
             if (!ok) revert ExternalCallFailed(type(uint256).max, to, bytes("NATIVE_WITHDRAW_FAILED"));
         } else {
             asset.safeTransfer(to, amount);
         }
+
+        _enforceRisk(beforeRisk);
         emit Withdrawn(asset, to, amount);
     }
 
@@ -115,11 +136,13 @@ contract CLAccount is ReentrancyGuard {
         nonReentrant
         returns (bytes[] memory results)
     {
+        bytes memory beforeRisk = _captureRisk();
         results = _executeAdapter(adapter, action, 0);
+        _enforceRisk(beforeRisk);
     }
 
     /// @notice Execute multiple protocol actions atomically through the same CL account.
-    /// @dev Any failed low-level call reverts the complete cross-protocol batch.
+    /// @dev Any failed low-level call or post-trade risk violation reverts the complete batch.
     function executeBatch(CLTypes.AdapterAction[] calldata actions)
         external
         onlyOwner
@@ -127,12 +150,14 @@ contract CLAccount is ReentrancyGuard {
         nonReentrant
         returns (bytes[][] memory results)
     {
+        bytes memory beforeRisk = _captureRisk();
         results = new bytes[][](actions.length);
         uint256 lowLevelCalls;
         for (uint256 i; i < actions.length; ++i) {
             results[i] = _executeAdapter(actions[i].adapter, actions[i].action, lowLevelCalls);
             lowLevelCalls += results[i].length;
         }
+        _enforceRisk(beforeRisk);
         emit BatchExecuted(actions.length, lowLevelCalls);
     }
 
@@ -172,5 +197,17 @@ contract CLAccount is ReentrancyGuard {
         if (!registry.isAdapterActive(adapter)) revert AdapterInactive();
         if (!authorizedAdapter[adapter]) revert AdapterNotAuthorized();
         if (authorizedAdapterVersion[adapter] != registry.adapterVersion(adapter)) revert AdapterAuthorizationStale();
+        if (riskGuardEnabled && !riskGuard.isAdapterCovered(address(this), adapter)) revert AdapterNotRiskCovered();
+    }
+
+    function _captureRisk() internal view returns (bytes memory) {
+        if (!riskGuardEnabled) return bytes("");
+        return riskGuard.capture(address(this));
+    }
+
+    function _enforceRisk(bytes memory beforeRisk) internal view {
+        if (!riskGuardEnabled) return;
+        (bool ok, bytes32 reason) = riskGuard.validateTransition(address(this), beforeRisk);
+        if (!ok) revert RiskPolicyViolation(reason);
     }
 }
