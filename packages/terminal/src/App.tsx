@@ -52,6 +52,9 @@ const deployment: CLDeployment = {
     ...(envAddress("VITE_CL_KURU_ADAPTER") ? { Kuru: envAddress("VITE_CL_KURU_ADAPTER")! } : {}),
     ...(envAddress("VITE_CL_PERPL_ADAPTER") ? { Perpl: envAddress("VITE_CL_PERPL_ADAPTER")! } : {}),
     ...(envAddress("VITE_CL_EULER_ADAPTER") ? { Euler: envAddress("VITE_CL_EULER_ADAPTER")! } : {}),
+    ...(envAddress("VITE_CL_WALLET_BALANCE_ADAPTER")
+      ? { WalletBalance: envAddress("VITE_CL_WALLET_BALANCE_ADAPTER")! }
+      : {}),
   },
 };
 
@@ -178,6 +181,7 @@ export default function App() {
     ["KURU", chain.id === 143 ? kuru[143].marginAccount : kuru[10143].marginAccount, deployment.adapters?.Kuru],
     ["PERPL", chain.id === 143 ? perpl[143].exchange : perpl[10143].exchange, deployment.adapters?.Perpl],
     ["EULER", chain.id === 143 ? euler[143].evc : undefined, deployment.adapters?.Euler],
+    ["FREE COLLATERAL", undefined, deployment.adapters?.WalletBalance],
   ] as const;
 
   return (
@@ -260,10 +264,10 @@ export default function App() {
 
         <section className="two-col">
           <div className="panel">
-            <div className="panel-title"><span>03</span> VENUES</div>
+            <div className="panel-title"><span>03</span> VENUES + RISK SOURCES</div>
             {protocolCards.map(([name, venue, adapter]) => (
               <div className="venue" key={name}>
-                <div><strong>{name}</strong><small>{venue ? short(venue) : "not available on selected chain"}</small></div>
+                <div><strong>{name}</strong><small>{venue ? short(venue) : "direct CL Account balances"}</small></div>
                 <div className="venue-right"><span className={adapter ? "light active" : "light"} />{adapter ? short(adapter) : "adapter pending"}</div>
               </div>
             ))}
@@ -284,7 +288,7 @@ export default function App() {
 
         <section className="panel execution-panel">
           <div className="panel-title"><span>05</span> OWNER EXECUTION CONSOLE</div>
-          <p className="warning">Raw adapter execution is intentionally explicit. CLAccount still enforces adapter authorization, target allowlists and the post-trade risk policy onchain.</p>
+          <p className="warning">Raw adapter execution is intentionally explicit. CLAccount still enforces adapter authorization, target allowlists, selector permissions and the post-trade risk policy onchain.</p>
           <div className="execution-grid">
             <label>ADAPTER<input value={adapterInput} onChange={(e) => setAdapterInput(e.target.value)} placeholder="0x adapter" /></label>
             <label>ACTION CALLDATA<textarea value={actionInput} onChange={(e) => setActionInput(e.target.value)} rows={3} /></label>
