@@ -51,70 +51,74 @@ contract RiskSolver {
         metrics = current;
         exposures = currentExposures;
 
-        if (ok) {
-            recommendation = Recommendation({
-                action: Action.NONE,
-                reason: bytes32(0),
-                asset: address(0),
-                currentNetUsd: 0,
-                targetNetUsd: 0,
-                reduceGrossUsd: 0,
-                repayDebtUsd: 0,
-                severityBps: 0
-            });
-            return (recommendation, metrics, exposures);
-        }
+        if (ok) return (_none(), metrics, exposures);
 
         RiskTypes.Policy memory p = policyManager.policy(account);
+        recommendation = _recommend(account, reason, p, metrics, exposures);
+    }
+
+    function _recommend(
+        address account,
+        bytes32 reason,
+        RiskTypes.Policy memory p,
+        RiskTypes.PortfolioMetrics memory metrics,
+        RiskTypes.AssetExposure[] memory exposures
+    ) internal view returns (Recommendation memory r) {
         (address topAsset, int256 topNetUsd) = _largestDirectionalExposure(exposures);
-
-        uint256 repayDebtUsd;
-        if (p.maxDebtUsd != 0 && metrics.debtUsd > p.maxDebtUsd) {
-            repayDebtUsd = metrics.debtUsd - p.maxDebtUsd;
-        }
-
-        uint256 grossReduction;
-        if (p.maxGrossExposureUsd != 0 && metrics.grossExposureUsd > p.maxGrossExposureUsd) {
-            grossReduction = metrics.grossExposureUsd - p.maxGrossExposureUsd;
-        }
+        uint256 repayDebtUsd = _debtReduction(p, metrics);
+        uint256 grossReduction = _grossReduction(p, metrics);
+        uint256 severity = _severity(reason, p, metrics);
 
         if (reason == policyManager.REASON_DEBT() || (topAsset == address(0) && repayDebtUsd != 0)) {
-            recommendation = Recommendation({
-                action: Action.REPAY,
-                reason: reason,
-                asset: address(0),
-                currentNetUsd: 0,
-                targetNetUsd: 0,
-                reduceGrossUsd: grossReduction,
-                repayDebtUsd: repayDebtUsd,
-                severityBps: _severity(reason, p, metrics)
-            });
-            return (recommendation, metrics, exposures);
+            r.action = Action.REPAY;
+            r.reason = reason;
+            r.reduceGrossUsd = grossReduction;
+            r.repayDebtUsd = repayDebtUsd;
+            r.severityBps = severity;
+            return r;
         }
 
-        uint256 assetLimit = topAsset == address(0) ? 0 : policyManager.assetLimitUsd(account, topAsset);
-        int256 targetNetUsd;
-        if (topAsset != address(0) && assetLimit != 0) {
-            int256 signedLimit = _toInt(assetLimit);
-            targetNetUsd = topNetUsd < 0 ? -signedLimit : signedLimit;
-            if (_abs(topNetUsd) <= assetLimit) targetNetUsd = topNetUsd;
-        }
+        int256 targetNetUsd = _targetNet(account, topAsset, topNetUsd);
+        if (grossReduction == 0 && topAsset != address(0)) grossReduction = _abs(topNetUsd - targetNetUsd);
 
-        Action action = topAsset == address(0) ? Action.DELEVERAGE : Action.HEDGE;
-        if (grossReduction == 0 && topAsset != address(0)) {
-            grossReduction = _abs(topNetUsd - targetNetUsd);
-        }
+        r.action = topAsset == address(0) ? Action.DELEVERAGE : Action.HEDGE;
+        r.reason = reason;
+        r.asset = topAsset;
+        r.currentNetUsd = topNetUsd;
+        r.targetNetUsd = targetNetUsd;
+        r.reduceGrossUsd = grossReduction;
+        r.repayDebtUsd = repayDebtUsd;
+        r.severityBps = severity;
+    }
 
-        recommendation = Recommendation({
-            action: action,
-            reason: reason,
-            asset: topAsset,
-            currentNetUsd: topNetUsd,
-            targetNetUsd: targetNetUsd,
-            reduceGrossUsd: grossReduction,
-            repayDebtUsd: repayDebtUsd,
-            severityBps: _severity(reason, p, metrics)
-        });
+    function _none() internal pure returns (Recommendation memory r) {
+        r.action = Action.NONE;
+    }
+
+    function _debtReduction(RiskTypes.Policy memory p, RiskTypes.PortfolioMetrics memory m)
+        internal
+        pure
+        returns (uint256)
+    {
+        if (p.maxDebtUsd == 0 || m.debtUsd <= p.maxDebtUsd) return 0;
+        return m.debtUsd - p.maxDebtUsd;
+    }
+
+    function _grossReduction(RiskTypes.Policy memory p, RiskTypes.PortfolioMetrics memory m)
+        internal
+        pure
+        returns (uint256)
+    {
+        if (p.maxGrossExposureUsd == 0 || m.grossExposureUsd <= p.maxGrossExposureUsd) return 0;
+        return m.grossExposureUsd - p.maxGrossExposureUsd;
+    }
+
+    function _targetNet(address account, address asset, int256 currentNetUsd) internal view returns (int256 targetNetUsd) {
+        if (asset == address(0)) return 0;
+        uint256 assetLimit = policyManager.assetLimitUsd(account, asset);
+        if (assetLimit == 0 || _abs(currentNetUsd) <= assetLimit) return 0;
+        int256 signedLimit = _toInt(assetLimit);
+        return currentNetUsd < 0 ? -signedLimit : signedLimit;
     }
 
     function _largestDirectionalExposure(RiskTypes.AssetExposure[] memory exposures)
