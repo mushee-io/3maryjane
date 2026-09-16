@@ -49,11 +49,11 @@ contract RiskPolicyManager is IRiskGuard {
         _;
     }
 
-    function configure(address account, RiskTypes.Policy calldata policy_, address[] calldata adapters)
+    function configure(address account, RiskTypes.Policy calldata policy_, address[] calldata adapters_)
         external
         onlyAccountOwner(account)
     {
-        if (policy_.enabled && adapters.length == 0) revert InvalidPolicy();
+        if (policy_.enabled && adapters_.length == 0) revert InvalidPolicy();
 
         address[] storage old = _adapters[account];
         for (uint256 i; i < old.length; ++i) {
@@ -61,15 +61,15 @@ contract RiskPolicyManager is IRiskGuard {
         }
         delete _adapters[account];
 
-        for (uint256 i; i < adapters.length; ++i) {
-            address adapter = adapters[i];
+        for (uint256 i; i < adapters_.length; ++i) {
+            address adapter = adapters_[i];
             if (adapter == address(0) || _covered[account][adapter]) revert InvalidPolicy();
             _covered[account][adapter] = true;
             _adapters[account].push(adapter);
         }
 
         _policy[account] = policy_;
-        emit PolicyConfigured(account, policy_.enabled, adapters.length);
+        emit PolicyConfigured(account, policy_.enabled, adapters_.length);
     }
 
     function setAssetLimit(address account, address asset, uint256 maxAbsNetUsd)
@@ -100,12 +100,14 @@ contract RiskPolicyManager is IRiskGuard {
         return _covered[account][adapter];
     }
 
+    /// @notice Captures both aggregate metrics and per-asset net exposure for strict pre/post comparison.
     function capture(address account) external view override returns (bytes memory state) {
         RiskTypes.Policy memory p = _policy[account];
         if (!p.enabled) return bytes("");
         address[] memory configuredAdapters = _adapters[account];
-        (RiskTypes.PortfolioMetrics memory metrics,) = engine.portfolio(account, configuredAdapters);
-        return abi.encode(metrics);
+        (RiskTypes.PortfolioMetrics memory metrics, RiskTypes.AssetExposure[] memory exposures) =
+            engine.portfolio(account, configuredAdapters);
+        return abi.encode(metrics, exposures);
     }
 
     function validateTransition(address account, bytes calldata beforeState)
@@ -118,15 +120,44 @@ contract RiskPolicyManager is IRiskGuard {
         if (!p.enabled) return (true, REASON_POLICY_DISABLED);
 
         address[] memory configuredAdapters = _adapters[account];
-        (RiskTypes.PortfolioMetrics memory afterMetrics, RiskTypes.AssetExposure[] memory exposures) =
+        (RiskTypes.PortfolioMetrics memory afterMetrics, RiskTypes.AssetExposure[] memory afterExposures) =
             engine.portfolio(account, configuredAdapters);
 
-        (ok, reason) = _passesPolicy(account, p, afterMetrics, exposures);
+        (ok, reason) = _passesPolicy(account, p, afterMetrics, afterExposures);
         if (ok) return (true, bytes32(0));
 
         if (!p.allowRiskReducingWhenBreached || beforeState.length == 0) return (false, reason);
-        RiskTypes.PortfolioMetrics memory beforeMetrics = abi.decode(beforeState, (RiskTypes.PortfolioMetrics));
-        if (_isRiskReducing(beforeMetrics, afterMetrics)) return (true, bytes32(0));
+        (
+            RiskTypes.PortfolioMetrics memory beforeMetrics,
+            RiskTypes.AssetExposure[] memory beforeExposures
+        ) = abi.decode(beforeState, (RiskTypes.PortfolioMetrics, RiskTypes.AssetExposure[]));
+        if (_isRiskReducing(beforeMetrics, afterMetrics, beforeExposures, afterExposures)) {
+            return (true, bytes32(0));
+        }
+        return (false, REASON_NOT_RISK_REDUCING);
+    }
+
+    /// @notice Dedicated delegated-automation check: the post-state must be strictly safer.
+    function validateRiskReduction(address account, bytes calldata beforeState)
+        external
+        view
+        override
+        returns (bool ok, bytes32 reason)
+    {
+        RiskTypes.Policy memory p = _policy[account];
+        if (!p.enabled || beforeState.length == 0) return (false, REASON_POLICY_DISABLED);
+
+        address[] memory configuredAdapters = _adapters[account];
+        (RiskTypes.PortfolioMetrics memory afterMetrics, RiskTypes.AssetExposure[] memory afterExposures) =
+            engine.portfolio(account, configuredAdapters);
+        (
+            RiskTypes.PortfolioMetrics memory beforeMetrics,
+            RiskTypes.AssetExposure[] memory beforeExposures
+        ) = abi.decode(beforeState, (RiskTypes.PortfolioMetrics, RiskTypes.AssetExposure[]));
+
+        if (_isRiskReducing(beforeMetrics, afterMetrics, beforeExposures, afterExposures)) {
+            return (true, bytes32(0));
+        }
         return (false, REASON_NOT_RISK_REDUCING);
     }
 
@@ -182,16 +213,46 @@ contract RiskPolicyManager is IRiskGuard {
         return (true, bytes32(0));
     }
 
+    /// @dev Strict delegated defense: no aggregate risk axis may worsen, no asset net exposure may worsen,
+    ///      and at least one core solvency axis must improve.
     function _isRiskReducing(
         RiskTypes.PortfolioMetrics memory beforeMetrics,
-        RiskTypes.PortfolioMetrics memory afterMetrics
+        RiskTypes.PortfolioMetrics memory afterMetrics,
+        RiskTypes.AssetExposure[] memory beforeExposures,
+        RiskTypes.AssetExposure[] memory afterExposures
     ) internal pure returns (bool) {
-        bool marginNotWorse = afterMetrics.maintenanceMarginUsd <= beforeMetrics.maintenanceMarginUsd;
+        if (afterMetrics.maintenanceMarginUsd > beforeMetrics.maintenanceMarginUsd) return false;
+        if (afterMetrics.initialMarginUsd > beforeMetrics.initialMarginUsd) return false;
+        if (afterMetrics.grossExposureUsd > beforeMetrics.grossExposureUsd) return false;
+        if (afterMetrics.directionalExposureUsd > beforeMetrics.directionalExposureUsd) return false;
+        if (afterMetrics.debtUsd > beforeMetrics.debtUsd) return false;
+        if (!_assetExposureNotWorse(beforeExposures, afterExposures)) return false;
+
         bool healthImproved = afterMetrics.healthE18 > beforeMetrics.healthE18;
         bool bufferImproved = afterMetrics.criticalMoveBps > beforeMetrics.criticalMoveBps;
-        bool debtNotWorse = afterMetrics.debtUsd <= beforeMetrics.debtUsd;
+        bool leverageImproved = afterMetrics.leverageE18 < beforeMetrics.leverageE18;
+        bool marginImproved = afterMetrics.marginUtilizationE18 < beforeMetrics.marginUtilizationE18;
+        bool debtImproved = afterMetrics.debtUsd < beforeMetrics.debtUsd;
+        bool exposureImproved = afterMetrics.directionalExposureUsd < beforeMetrics.directionalExposureUsd;
 
-        return marginNotWorse && debtNotWorse && (healthImproved || bufferImproved);
+        return healthImproved || bufferImproved || leverageImproved || marginImproved || debtImproved || exposureImproved;
+    }
+
+    function _assetExposureNotWorse(
+        RiskTypes.AssetExposure[] memory beforeExposures,
+        RiskTypes.AssetExposure[] memory afterExposures
+    ) internal pure returns (bool) {
+        for (uint256 i; i < afterExposures.length; ++i) {
+            uint256 beforeAbs;
+            for (uint256 j; j < beforeExposures.length; ++j) {
+                if (beforeExposures[j].asset == afterExposures[i].asset) {
+                    beforeAbs = _abs(beforeExposures[j].netUsd);
+                    break;
+                }
+            }
+            if (_abs(afterExposures[i].netUsd) > beforeAbs) return false;
+        }
+        return true;
     }
 
     function _abs(int256 value) internal pure returns (uint256) {
