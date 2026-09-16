@@ -14,6 +14,11 @@ if (chainId !== 143 && chainId !== 10143) throw new Error(`Unsupported CL_CHAIN_
 export const rpcUrl = process.env.CL_RPC_URL;
 export const port = Number(process.env.PORT ?? "8787");
 
+const kuruAdapter = optionalAddress("CL_KURU_ADAPTER");
+const perplAdapter = optionalAddress("CL_PERPL_ADAPTER");
+const eulerAdapter = optionalAddress("CL_EULER_ADAPTER");
+const walletBalanceAdapter = optionalAddress("CL_WALLET_BALANCE_ADAPTER");
+
 export const deployment: CLDeployment = {
   chainId,
   accountFactory: optionalAddress("CL_ACCOUNT_FACTORY"),
@@ -28,4 +33,10 @@ export const deployment: CLDeployment = {
   defensiveExecutor: optionalAddress("CL_DEFENSIVE_EXECUTOR"),
   keeperNetwork: optionalAddress("CL_KEEPER_NETWORK"),
   simulationEngine: optionalAddress("CL_SIMULATION_ENGINE"),
+  adapters: {
+    ...(kuruAdapter ? { Kuru: kuruAdapter } : {}),
+    ...(perplAdapter ? { Perpl: perplAdapter } : {}),
+    ...(eulerAdapter ? { Euler: eulerAdapter } : {}),
+    ...(walletBalanceAdapter ? { WalletBalance: walletBalanceAdapter } : {}),
+  },
 };
