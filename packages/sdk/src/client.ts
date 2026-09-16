@@ -30,6 +30,45 @@ export interface CreateIntentInput {
   metadataHash: Hex;
 }
 
+export interface CLAccountState {
+  owner: Address;
+  paused: boolean;
+  riskGuard: Address;
+  riskGuardEnabled: boolean;
+}
+
+export interface SolverResult {
+  recommendation: SolverRecommendation;
+  metrics: PortfolioMetrics;
+  exposures: AssetExposure[];
+}
+
+/**
+ * Stable public surface for the CL SDK.
+ *
+ * Keep this interface intentionally narrower than viem's inferred client types so declaration
+ * output remains portable across package managers and viem versions.
+ */
+export interface CLClient {
+  readonly deployment: CLDeployment;
+  readonly publicClient: PublicClient;
+  readonly walletClient: WalletClient | undefined;
+  getAccountState(account: Address): Promise<CLAccountState>;
+  getRisk(account: Address): Promise<RiskSnapshot>;
+  getPolicy(account: Address): Promise<RiskPolicy>;
+  getCoveredAdapters(account: Address): Promise<Address[]>;
+  getSolverRecommendation(account: Address): Promise<SolverResult>;
+  tokenBalance(token: Address, account: Address): Promise<bigint>;
+  execute(account: Address, adapter: Address, action: Hex): Promise<Hex>;
+  executeBatch(account: Address, actions: readonly AdapterAction[]): Promise<Hex>;
+  authorizeAdapter(account: Address, adapter: Address, authorized?: boolean): Promise<Hex>;
+  setRiskGuard(account: Address, guard: Address, enabled?: boolean): Promise<Hex>;
+  setDefensiveOperator(account: Address, operator: Address, authorized?: boolean): Promise<Hex>;
+  withdraw(account: Address, asset: Address, to: Address, amount: bigint): Promise<Hex>;
+  createIntent(input: CreateIntentInput): Promise<Hex>;
+  approveToken(token: Address, spender: Address, amount: bigint): Promise<Hex>;
+}
+
 interface RawPortfolioMetrics {
   assetsUsd: bigint;
   debtUsd: bigint;
@@ -99,7 +138,7 @@ async function write(
   return walletClient.writeContract(simulation.request);
 }
 
-export function createCLClient(options: CreateCLClientOptions) {
+export function createCLClient(options: CreateCLClientOptions): CLClient {
   const { publicClient, walletClient, deployment } = options;
 
   return {
@@ -107,7 +146,7 @@ export function createCLClient(options: CreateCLClientOptions) {
     publicClient,
     walletClient,
 
-    async getAccountState(account: Address) {
+    async getAccountState(account: Address): Promise<CLAccountState> {
       const [owner, paused, riskGuard, riskGuardEnabled] = await Promise.all([
         publicClient.readContract({ address: account, abi: clAccountAbi, functionName: "owner" }),
         publicClient.readContract({ address: account, abi: clAccountAbi, functionName: "paused" }),
@@ -165,11 +204,7 @@ export function createCLClient(options: CreateCLClientOptions) {
       return [...result];
     },
 
-    async getSolverRecommendation(account: Address): Promise<{
-      recommendation: SolverRecommendation;
-      metrics: PortfolioMetrics;
-      exposures: AssetExposure[];
-    }> {
+    async getSolverRecommendation(account: Address): Promise<SolverResult> {
       const solver = configured(deployment.riskSolver, "riskSolver");
       const result = await publicClient.readContract({
         address: solver,
