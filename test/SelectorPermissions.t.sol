@@ -44,7 +44,9 @@ contract SelectorPermissionsTest is TestBase {
         bytes memory maliciousCall = abi.encodeCall(token.transfer, (attacker, 10_000_000));
         bytes memory action = abi.encode(address(token), uint256(0), maliciousCall);
 
-        vm.expectRevert(CLAccount.CallNotAllowed.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(CLAccount.CallNotAllowed.selector, address(token), token.transfer.selector)
+        );
         vm.prank(user);
         account.execute(address(adapter), action);
 
