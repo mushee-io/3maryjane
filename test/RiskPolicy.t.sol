@@ -83,8 +83,12 @@ contract RiskPolicyTest is TestBase {
 
     function testUnsafeTransitionRevertsUnderlyingProtocolMutation() public {
         bytes memory action = abi.encode(int256(3e18), uint256(0), uint256(0), int256(0));
+        bytes memory expected = abi.encodeWithSelector(
+            CLAccount.RiskPolicyViolation.selector,
+            policyManager.REASON_GROSS_EXPOSURE()
+        );
 
-        vm.expectRevert(CLAccount.RiskPolicyViolation.selector);
+        vm.expectRevert(expected);
         vm.prank(user);
         account.execute(address(riskAdapter), action);
 
