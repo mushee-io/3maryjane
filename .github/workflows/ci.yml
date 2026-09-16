@@ -1,0 +1,22 @@
+name: CL Solidity CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Forge build
+        run: forge build --sizes
+      - name: Forge tests
+        run: forge test -vvv
