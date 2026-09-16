@@ -28,6 +28,16 @@ function envelope(kind: number, payload: Hex): Hex {
   return encodeAbiParameters(actionEnvelope, [kind, payload]);
 }
 
+function assertUint40Ids(orderIds: readonly number[]): number[] {
+  const maxUint40 = 2 ** 40 - 1;
+  for (const id of orderIds) {
+    if (!Number.isSafeInteger(id) || id < 0 || id > maxUint40) {
+      throw new Error(`Kuru order id ${id} is outside uint40`);
+    }
+  }
+  return [...orderIds];
+}
+
 export interface PerplOrderDesc {
   orderDescId: bigint;
   perpId: bigint;
@@ -65,11 +75,11 @@ export const encodeKuru = {
   limitSell(market: Address, price: bigint, size: bigint, postOnly = true): Hex {
     return envelope(KuruAction.LIMIT_SELL, encodeAbiParameters(limitOrder, [market, price, size, postOnly]));
   },
-  cancelOrders(market: Address, orderIds: readonly bigint[]): Hex {
-    return envelope(KuruAction.CANCEL_ORDERS, encodeAbiParameters(cancelOrders, [market, [...orderIds]]));
+  cancelOrders(market: Address, orderIds: readonly number[]): Hex {
+    return envelope(KuruAction.CANCEL_ORDERS, encodeAbiParameters(cancelOrders, [market, assertUint40Ids(orderIds)]));
   },
-  cancelFlipOrders(market: Address, orderIds: readonly bigint[]): Hex {
-    return envelope(KuruAction.CANCEL_FLIP_ORDERS, encodeAbiParameters(cancelOrders, [market, [...orderIds]]));
+  cancelFlipOrders(market: Address, orderIds: readonly number[]): Hex {
+    return envelope(KuruAction.CANCEL_FLIP_ORDERS, encodeAbiParameters(cancelOrders, [market, assertUint40Ids(orderIds)]));
   },
 };
 
