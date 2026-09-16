@@ -30,6 +30,30 @@ export interface CreateIntentInput {
   metadataHash: Hex;
 }
 
+interface RawPortfolioMetrics {
+  assetsUsd: bigint;
+  debtUsd: bigint;
+  equityUsd: bigint;
+  pnlUsd: bigint;
+  grossExposureUsd: bigint;
+  directionalExposureUsd: bigint;
+  initialMarginUsd: bigint;
+  maintenanceMarginUsd: bigint;
+  leverageE18: bigint;
+  healthE18: bigint;
+  marginUtilizationE18: bigint;
+  criticalMoveBps: bigint;
+}
+
+interface RawAssetExposure {
+  asset: Address;
+  netUsd: bigint;
+  grossUsd: bigint;
+  hedgedPairUsd: bigint;
+  initialMarginUsd: bigint;
+  maintenanceMarginUsd: bigint;
+}
+
 const solverActions: SolverAction[] = ["NONE", "HEDGE", "REPAY", "DELEVERAGE"];
 
 function configured(value: Address | undefined, name: string): Address {
@@ -37,31 +61,31 @@ function configured(value: Address | undefined, name: string): Address {
   return value;
 }
 
-function toMetrics(raw: readonly unknown[]): PortfolioMetrics {
+function toMetrics(raw: RawPortfolioMetrics): PortfolioMetrics {
   return {
-    assetsUsd: raw[0] as bigint,
-    debtUsd: raw[1] as bigint,
-    equityUsd: raw[2] as bigint,
-    pnlUsd: raw[3] as bigint,
-    grossExposureUsd: raw[4] as bigint,
-    directionalExposureUsd: raw[5] as bigint,
-    initialMarginUsd: raw[6] as bigint,
-    maintenanceMarginUsd: raw[7] as bigint,
-    leverageE18: raw[8] as bigint,
-    healthE18: raw[9] as bigint,
-    marginUtilizationE18: raw[10] as bigint,
-    criticalMoveBps: raw[11] as bigint,
+    assetsUsd: raw.assetsUsd,
+    debtUsd: raw.debtUsd,
+    equityUsd: raw.equityUsd,
+    pnlUsd: raw.pnlUsd,
+    grossExposureUsd: raw.grossExposureUsd,
+    directionalExposureUsd: raw.directionalExposureUsd,
+    initialMarginUsd: raw.initialMarginUsd,
+    maintenanceMarginUsd: raw.maintenanceMarginUsd,
+    leverageE18: raw.leverageE18,
+    healthE18: raw.healthE18,
+    marginUtilizationE18: raw.marginUtilizationE18,
+    criticalMoveBps: raw.criticalMoveBps,
   };
 }
 
-function toExposure(raw: readonly unknown[]): AssetExposure {
+function toExposure(raw: RawAssetExposure): AssetExposure {
   return {
-    asset: raw[0] as Address,
-    netUsd: raw[1] as bigint,
-    grossUsd: raw[2] as bigint,
-    hedgedPairUsd: raw[3] as bigint,
-    initialMarginUsd: raw[4] as bigint,
-    maintenanceMarginUsd: raw[5] as bigint,
+    asset: raw.asset,
+    netUsd: raw.netUsd,
+    grossUsd: raw.grossUsd,
+    hedgedPairUsd: raw.hedgedPairUsd,
+    initialMarginUsd: raw.initialMarginUsd,
+    maintenanceMarginUsd: raw.maintenanceMarginUsd,
   };
 }
 
@@ -105,8 +129,8 @@ export function createCLClient(options: CreateCLClientOptions) {
       return {
         ok,
         reason,
-        metrics: toMetrics(metrics as unknown as readonly unknown[]),
-        exposures: exposures.map((item) => toExposure(item as unknown as readonly unknown[])),
+        metrics: toMetrics(metrics),
+        exposures: exposures.map(toExposure),
       };
     },
 
@@ -119,14 +143,14 @@ export function createCLClient(options: CreateCLClientOptions) {
         args: [account],
       });
       return {
-        enabled: p[0],
-        allowRiskReducingWhenBreached: p[1],
-        maxGrossExposureUsd: p[2],
-        maxDebtUsd: p[3],
-        maxLeverageE18: p[4],
-        maxMarginUtilizationE18: p[5],
-        minHealthE18: p[6],
-        minCriticalMoveBps: p[7],
+        enabled: p.enabled,
+        allowRiskReducingWhenBreached: p.allowRiskReducingWhenBreached,
+        maxGrossExposureUsd: p.maxGrossExposureUsd,
+        maxDebtUsd: p.maxDebtUsd,
+        maxLeverageE18: p.maxLeverageE18,
+        maxMarginUtilizationE18: p.maxMarginUtilizationE18,
+        minHealthE18: p.minHealthE18,
+        minCriticalMoveBps: p.minCriticalMoveBps,
       };
     },
 
@@ -154,20 +178,20 @@ export function createCLClient(options: CreateCLClientOptions) {
         args: [account],
       });
       const [r, metrics, exposures] = result;
-      const actionIndex = Number(r[0]);
+      const actionIndex = Number(r.action);
       return {
         recommendation: {
           action: solverActions[actionIndex] ?? "NONE",
-          reason: r[1],
-          asset: r[2],
-          currentNetUsd: r[3],
-          targetNetUsd: r[4],
-          reduceGrossUsd: r[5],
-          repayDebtUsd: r[6],
-          severityBps: r[7],
+          reason: r.reason,
+          asset: r.asset,
+          currentNetUsd: r.currentNetUsd,
+          targetNetUsd: r.targetNetUsd,
+          reduceGrossUsd: r.reduceGrossUsd,
+          repayDebtUsd: r.repayDebtUsd,
+          severityBps: r.severityBps,
         },
-        metrics: toMetrics(metrics as unknown as readonly unknown[]),
-        exposures: exposures.map((item) => toExposure(item as unknown as readonly unknown[])),
+        metrics: toMetrics(metrics),
+        exposures: exposures.map(toExposure),
       };
     },
 
