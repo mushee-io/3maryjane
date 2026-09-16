@@ -1,5 +1,12 @@
 import type { PublicClient, WalletClient } from "viem";
-import { clAccountAbi, erc20Abi, intentEngineAbi, riskPolicyManagerAbi, riskSolverAbi } from "./abis";
+import {
+  clAccountAbi,
+  clAccountFactoryAbi,
+  erc20Abi,
+  intentEngineAbi,
+  riskPolicyManagerAbi,
+  riskSolverAbi,
+} from "./abis";
 import type {
   AdapterAction,
   Address,
@@ -43,12 +50,7 @@ export interface SolverResult {
   exposures: AssetExposure[];
 }
 
-/**
- * Stable public surface for the CL SDK.
- *
- * Keep this interface intentionally narrower than viem's inferred client types so declaration
- * output remains portable across package managers and viem versions.
- */
+/** Stable public surface for the CL SDK. */
 export interface CLClient {
   readonly deployment: CLDeployment;
   readonly publicClient: PublicClient;
@@ -59,10 +61,15 @@ export interface CLClient {
   getCoveredAdapters(account: Address): Promise<Address[]>;
   getSolverRecommendation(account: Address): Promise<SolverResult>;
   tokenBalance(token: Address, account: Address): Promise<bigint>;
+  predictAccount(owner: Address, salt: Hex): Promise<Address>;
+  createAccount(salt: Hex): Promise<Hex>;
   execute(account: Address, adapter: Address, action: Hex): Promise<Hex>;
   executeBatch(account: Address, actions: readonly AdapterAction[]): Promise<Hex>;
   authorizeAdapter(account: Address, adapter: Address, authorized?: boolean): Promise<Hex>;
+  setAssetAllowed(account: Address, asset: Address, allowed?: boolean): Promise<Hex>;
   setRiskGuard(account: Address, guard: Address, enabled?: boolean): Promise<Hex>;
+  configurePolicy(account: Address, policy: RiskPolicy, adapters: readonly Address[]): Promise<Hex>;
+  setAssetLimit(account: Address, asset: Address, maxAbsNetUsd: bigint): Promise<Hex>;
   setDefensiveOperator(account: Address, operator: Address, authorized?: boolean): Promise<Hex>;
   withdraw(account: Address, asset: Address, to: Address, amount: bigint): Promise<Hex>;
   createIntent(input: CreateIntentInput): Promise<Hex>;
@@ -94,9 +101,15 @@ interface RawAssetExposure {
 }
 
 const solverActions: SolverAction[] = ["NONE", "HEDGE", "REPAY", "DELEVERAGE"];
+const bytes32Pattern = /^0x[0-9a-fA-F]{64}$/;
 
 function configured(value: Address | undefined, name: string): Address {
   if (!value) throw new Error(`${name} is not configured for this CL deployment`);
+  return value;
+}
+
+function bytes32(value: Hex, name: string): Hex {
+  if (!bytes32Pattern.test(value)) throw new Error(`${name} must be exactly 32 bytes`);
   return value;
 }
 
@@ -165,12 +178,7 @@ export function createCLClient(options: CreateCLClientOptions): CLClient {
         args: [account],
       });
       const [ok, reason, metrics, exposures] = result;
-      return {
-        ok,
-        reason,
-        metrics: toMetrics(metrics),
-        exposures: exposures.map(toExposure),
-      };
+      return { ok, reason, metrics: toMetrics(metrics), exposures: exposures.map(toExposure) };
     },
 
     async getPolicy(account: Address): Promise<RiskPolicy> {
@@ -234,6 +242,26 @@ export function createCLClient(options: CreateCLClientOptions): CLClient {
       return publicClient.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [account] });
     },
 
+    async predictAccount(owner: Address, salt: Hex): Promise<Address> {
+      const factory = configured(deployment.accountFactory, "accountFactory");
+      return publicClient.readContract({
+        address: factory,
+        abi: clAccountFactoryAbi,
+        functionName: "predictAccount",
+        args: [owner, bytes32(salt, "salt")],
+      });
+    },
+
+    async createAccount(salt: Hex): Promise<Hex> {
+      const factory = configured(deployment.accountFactory, "accountFactory");
+      return write(publicClient, walletClient, {
+        address: factory,
+        abi: clAccountFactoryAbi,
+        functionName: "createAccount",
+        args: [bytes32(salt, "salt")],
+      });
+    },
+
     async execute(account: Address, adapter: Address, action: Hex): Promise<Hex> {
       return write(publicClient, walletClient, {
         address: account,
@@ -261,12 +289,44 @@ export function createCLClient(options: CreateCLClientOptions): CLClient {
       });
     },
 
+    async setAssetAllowed(account: Address, asset: Address, allowed = true): Promise<Hex> {
+      return write(publicClient, walletClient, {
+        address: account,
+        abi: clAccountAbi,
+        functionName: "setAssetAllowed",
+        args: [asset, allowed],
+      });
+    },
+
     async setRiskGuard(account: Address, guard: Address, enabled = true): Promise<Hex> {
       return write(publicClient, walletClient, {
         address: account,
         abi: clAccountAbi,
         functionName: "setRiskGuard",
         args: [guard, enabled],
+      });
+    },
+
+    async configurePolicy(account: Address, policy: RiskPolicy, adapters: readonly Address[]): Promise<Hex> {
+      if (policy.minCriticalMoveBps < 0 || policy.minCriticalMoveBps > 65_535) {
+        throw new Error("minCriticalMoveBps is outside uint16");
+      }
+      const manager = configured(deployment.riskPolicyManager, "riskPolicyManager");
+      return write(publicClient, walletClient, {
+        address: manager,
+        abi: riskPolicyManagerAbi,
+        functionName: "configure",
+        args: [account, policy, [...adapters]],
+      });
+    },
+
+    async setAssetLimit(account: Address, asset: Address, maxAbsNetUsd: bigint): Promise<Hex> {
+      const manager = configured(deployment.riskPolicyManager, "riskPolicyManager");
+      return write(publicClient, walletClient, {
+        address: manager,
+        abi: riskPolicyManagerAbi,
+        functionName: "setAssetLimit",
+        args: [account, asset, maxAbsNetUsd],
       });
     },
 
@@ -301,8 +361,8 @@ export function createCLClient(options: CreateCLClientOptions): CLClient {
           input.targetNetUsd,
           input.maxNotionalUsd,
           input.deadline,
-          input.constraintsHash,
-          input.metadataHash,
+          bytes32(input.constraintsHash, "constraintsHash"),
+          bytes32(input.metadataHash, "metadataHash"),
         ],
       });
     },
