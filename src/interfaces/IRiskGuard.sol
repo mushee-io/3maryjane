@@ -13,4 +13,11 @@ interface IRiskGuard {
         external
         view
         returns (bool ok, bytes32 reason);
+
+    /// @notice Require a transition to be strictly defensive even if the account remains policy-breached.
+    /// @dev Used by delegated automation paths. Implementations should compare complete pre/post risk state.
+    function validateRiskReduction(address account, bytes calldata beforeState)
+        external
+        view
+        returns (bool ok, bytes32 reason);
 }
