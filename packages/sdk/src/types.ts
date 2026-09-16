@@ -113,13 +113,22 @@ export interface CLDeployment {
   adapters?: Record<string, Address>;
 }
 
+export interface ProtocolTargetPermission {
+  target: Address;
+  /** Exact 4-byte function selectors that the CL account may call on this target. */
+  selectors: Hex[];
+}
+
 export interface ProtocolManifest {
   id: string;
   displayName: string;
   adapter: Address;
   chainId: number;
   positionTypes: PositionType[];
+  /** Every target that buildExecution() may emit. */
   targets: Address[];
+  /** Production manifests should enumerate selectors for every target. */
+  targetPermissions?: ProtocolTargetPermission[];
   assets: Address[];
   docsUrl?: string;
   metadata?: Record<string, string>;
