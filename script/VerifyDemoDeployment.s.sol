@@ -12,7 +12,7 @@ interface VmVerifyDemo {
 
 /// @title VerifyDemoDeployment
 /// @notice Read-only fail-closed verifier for the final CL mainnet account configuration.
-/// @dev Run with `forge script` without `--broadcast`. It makes no state changes.
+/// @dev Run with `forge script` without `--broadcast`. It makes no state changes on Monad.
 contract VerifyDemoDeployment {
     VmVerifyDemo internal constant vm =
         VmVerifyDemo(address(uint160(uint256(keccak256("hevm cheat code")))));
@@ -37,7 +37,10 @@ contract VerifyDemoDeployment {
         emit DeploymentVerified(accountAddress, vm.envAddress("CL_ACCOUNT_OWNER"), 3, 4);
     }
 
-    function _verifyAccount(address accountAddress) internal view {
+    // These helpers intentionally are not marked view because Foundry's env cheatcodes are
+    // modeled as potentially state-changing by Solidity, even though this script is run without
+    // --broadcast and only performs RPC reads against Monad.
+    function _verifyAccount(address accountAddress) internal {
         CLAccount account = CLAccount(payable(accountAddress));
         address expectedOwner = vm.envAddress("CL_ACCOUNT_OWNER");
         address policyManagerAddress = vm.envAddress("CL_RISK_POLICY_MANAGER");
@@ -51,7 +54,7 @@ contract VerifyDemoDeployment {
         if (!account.defensiveOperator(defensiveExecutor)) revert DefensiveOperatorMissing(defensiveExecutor);
     }
 
-    function _verifyAdapters(address accountAddress) internal view {
+    function _verifyAdapters(address accountAddress) internal {
         CLAccount account = CLAccount(payable(accountAddress));
         AdapterRegistry registry = AdapterRegistry(address(account.registry()));
         RiskPolicyManager policyManager = RiskPolicyManager(vm.envAddress("CL_RISK_POLICY_MANAGER"));
@@ -85,7 +88,7 @@ contract VerifyDemoDeployment {
         if (!policyManager.isAdapterCovered(accountAddress, adapter)) revert AdapterNotRiskCovered(adapter);
     }
 
-    function _verifyAssets(address accountAddress) internal view {
+    function _verifyAssets(address accountAddress) internal {
         CLAccount account = CLAccount(payable(accountAddress));
         address[] memory allowedAssets = vm.envAddress("CL_ALLOWED_ASSETS", ",");
         for (uint256 i = 0; i < allowedAssets.length; ++i) {
