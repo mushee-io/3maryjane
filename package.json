@@ -1,5 +1,12 @@
 {
   "name": "cl-monad",
   "private": true,
-  "workspaces": ["packages/*"]
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build:apps": "npm run build --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
 }
