@@ -37,6 +37,7 @@ contract CLAccount is ReentrancyGuard {
     error DefensiveOperatorNotAuthorized();
     error RiskGuardRequired();
     error TargetNotAllowed();
+    error CallNotAllowed(address target, bytes4 selector);
     error AssetNotAllowed();
     error InsufficientNativeBalance();
     error RiskPolicyViolation(bytes32 reason);
@@ -216,19 +217,17 @@ contract CLAccount is ReentrancyGuard {
             CLTypes.Execution memory execution = calls[i];
             if (execution.target == address(0) || execution.target == address(this)) revert TargetNotAllowed();
             if (!registry.isTargetAllowed(adapter, execution.target)) revert TargetNotAllowed();
+
+            bytes4 selector = _selector(execution.data);
+            if (!registry.isCallAllowed(adapter, execution.target, selector)) {
+                revert CallNotAllowed(execution.target, selector);
+            }
             if (execution.value > address(this).balance) revert InsufficientNativeBalance();
 
             (bool ok, bytes memory result) = execution.target.call{value: execution.value}(execution.data);
             if (!ok) revert ExternalCallFailed(globalOffset + i, execution.target, result);
             results[i] = result;
 
-            bytes4 selector;
-            if (execution.data.length >= 4) {
-                bytes memory d = execution.data;
-                assembly {
-                    selector := mload(add(d, 32))
-                }
-            }
             emit CallExecuted(adapter, globalOffset + i, execution.target, execution.value, selector);
         }
 
@@ -251,5 +250,12 @@ contract CLAccount is ReentrancyGuard {
         if (!riskGuardEnabled) return;
         (bool ok, bytes32 reason) = riskGuard.validateTransition(address(this), beforeRisk);
         if (!ok) revert RiskPolicyViolation(reason);
+    }
+
+    function _selector(bytes memory data) internal pure returns (bytes4 selector) {
+        if (data.length < 4) return bytes4(0);
+        assembly {
+            selector := mload(add(data, 32))
+        }
     }
 }
