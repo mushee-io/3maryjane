@@ -41,76 +41,79 @@ contract ConfigureDemoRisk {
     function run() external {
         uint256 key = vm.envUint("PRIVATE_KEY");
         RiskRegistry registry = RiskRegistry(vm.envAddress("RISK_REGISTRY"));
-
         address underlying = vm.envAddress("RISK_UNDERLYING_ASSET");
         address collateral = vm.envAddress("RISK_COLLATERAL_ASSET");
-        address underlyingFeed = vm.envAddress("RISK_UNDERLYING_FEED");
-        address collateralFeed = vm.envAddress("RISK_COLLATERAL_FEED");
         if (underlying == collateral) revert DuplicateAssetConfig();
 
         uint256[] memory perpIds = vm.envUint("PERPL_TRACKED_PERP_IDS", ",");
         if (perpIds.length == 0) revert EmptyPerpSet();
 
-        RiskTypes.AssetConfig memory underlyingConfig = RiskTypes.AssetConfig({
-            priceSource: address(0),
-            decimals: _u8("RISK_UNDERLYING_DECIMALS"),
-            initialMarginBps: _u16("RISK_UNDERLYING_INITIAL_MARGIN_BPS"),
-            maintenanceMarginBps: _u16("RISK_UNDERLYING_MAINTENANCE_MARGIN_BPS"),
-            hedgeMarginBps: _u16("RISK_UNDERLYING_HEDGE_MARGIN_BPS"),
-            stressBps: _u16("RISK_UNDERLYING_STRESS_BPS"),
-            maxStaleness: _u32("RISK_UNDERLYING_MAX_STALENESS"),
-            enabled: true
-        });
-
-        RiskTypes.AssetConfig memory collateralConfig = RiskTypes.AssetConfig({
-            priceSource: address(0),
-            decimals: _u8("RISK_COLLATERAL_DECIMALS"),
-            initialMarginBps: _u16("RISK_COLLATERAL_INITIAL_MARGIN_BPS"),
-            maintenanceMarginBps: _u16("RISK_COLLATERAL_MAINTENANCE_MARGIN_BPS"),
-            hedgeMarginBps: _u16("RISK_COLLATERAL_HEDGE_MARGIN_BPS"),
-            stressBps: _u16("RISK_COLLATERAL_STRESS_BPS"),
-            maxStaleness: _u32("RISK_COLLATERAL_MAX_STALENESS"),
-            enabled: true
-        });
-
-        uint8 exposureDecimals = _u8("RISK_PERPL_EXPOSURE_DECIMALS");
-        uint8 perpCollateralDecimals = _u8("RISK_PERPL_COLLATERAL_DECIMALS");
-        uint8 pnlDecimals = _u8("RISK_PERPL_PNL_DECIMALS");
-
         vm.startBroadcast(key);
+        address underlyingSource = _configureUnderlying(registry, underlying);
+        address collateralSource = _configureCollateral(registry, collateral);
+        _configurePerps(registry, underlying, collateral, perpIds);
+        emit DemoRiskConfigured(underlying, collateral, underlyingSource, collateralSource, perpIds.length);
+        vm.stopBroadcast();
+    }
 
-        ChainlinkPriceSource underlyingSource = new ChainlinkPriceSource(underlyingFeed);
-        ChainlinkPriceSource collateralSource = new ChainlinkPriceSource(collateralFeed);
+    function _configureUnderlying(RiskRegistry registry, address asset) internal returns (address source) {
+        ChainlinkPriceSource priceSource = new ChainlinkPriceSource(vm.envAddress("RISK_UNDERLYING_FEED"));
+        source = address(priceSource);
+        registry.setAssetConfig(
+            asset,
+            RiskTypes.AssetConfig({
+                priceSource: source,
+                decimals: _u8("RISK_UNDERLYING_DECIMALS"),
+                initialMarginBps: _u16("RISK_UNDERLYING_INITIAL_MARGIN_BPS"),
+                maintenanceMarginBps: _u16("RISK_UNDERLYING_MAINTENANCE_MARGIN_BPS"),
+                hedgeMarginBps: _u16("RISK_UNDERLYING_HEDGE_MARGIN_BPS"),
+                stressBps: _u16("RISK_UNDERLYING_STRESS_BPS"),
+                maxStaleness: _u32("RISK_UNDERLYING_MAX_STALENESS"),
+                enabled: true
+            })
+        );
+    }
 
-        underlyingConfig.priceSource = address(underlyingSource);
-        collateralConfig.priceSource = address(collateralSource);
-        registry.setAssetConfig(underlying, underlyingConfig);
-        registry.setAssetConfig(collateral, collateralConfig);
+    function _configureCollateral(RiskRegistry registry, address asset) internal returns (address source) {
+        ChainlinkPriceSource priceSource = new ChainlinkPriceSource(vm.envAddress("RISK_COLLATERAL_FEED"));
+        source = address(priceSource);
+        registry.setAssetConfig(
+            asset,
+            RiskTypes.AssetConfig({
+                priceSource: source,
+                decimals: _u8("RISK_COLLATERAL_DECIMALS"),
+                initialMarginBps: _u16("RISK_COLLATERAL_INITIAL_MARGIN_BPS"),
+                maintenanceMarginBps: _u16("RISK_COLLATERAL_MAINTENANCE_MARGIN_BPS"),
+                hedgeMarginBps: _u16("RISK_COLLATERAL_HEDGE_MARGIN_BPS"),
+                stressBps: _u16("RISK_COLLATERAL_STRESS_BPS"),
+                maxStaleness: _u32("RISK_COLLATERAL_MAX_STALENESS"),
+                enabled: true
+            })
+        );
+    }
+
+    function _configurePerps(
+        RiskRegistry registry,
+        address underlying,
+        address collateral,
+        uint256[] memory perpIds
+    ) internal {
+        uint8 exposureDecimals = _u8("RISK_PERPL_EXPOSURE_DECIMALS");
+        uint8 collateralDecimals = _u8("RISK_PERPL_COLLATERAL_DECIMALS");
+        uint8 pnlDecimals = _u8("RISK_PERPL_PNL_DECIMALS");
+        RiskTypes.InstrumentConfig memory config = RiskTypes.InstrumentConfig({
+            underlyingAsset: underlying,
+            collateralAsset: collateral,
+            exposureDecimals: exposureDecimals,
+            collateralDecimals: collateralDecimals,
+            pnlDecimals: pnlDecimals,
+            enabled: true
+        });
 
         for (uint256 i = 0; i < perpIds.length; ++i) {
             bytes32 instrumentId = keccak256(abi.encode(PERPL_PROTOCOL_ID, "PERP", perpIds[i]));
-            registry.setInstrumentConfig(
-                instrumentId,
-                RiskTypes.InstrumentConfig({
-                    underlyingAsset: underlying,
-                    collateralAsset: collateral,
-                    exposureDecimals: exposureDecimals,
-                    collateralDecimals: perpCollateralDecimals,
-                    pnlDecimals: pnlDecimals,
-                    enabled: true
-                })
-            );
+            registry.setInstrumentConfig(instrumentId, config);
         }
-
-        emit DemoRiskConfigured(
-            underlying,
-            collateral,
-            address(underlyingSource),
-            address(collateralSource),
-            perpIds.length
-        );
-
-        vm.stopBroadcast();
     }
 
     function _u8(string memory name) internal returns (uint8 result) {
