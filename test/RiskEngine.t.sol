@@ -19,13 +19,15 @@ contract RiskEngineTest is TestBase {
     RiskEngine internal engine;
     MockRiskAdapter internal spot;
     MockRiskAdapter internal perp;
+    MockPriceSource internal monPrice;
+    MockPriceSource internal usdcPrice;
 
     function setUp() public {
         registry = new RiskRegistry(address(this));
         engine = new RiskEngine(address(registry));
 
-        MockPriceSource monPrice = new MockPriceSource(2e18);
-        MockPriceSource usdcPrice = new MockPriceSource(1e18);
+        monPrice = new MockPriceSource(2e18);
+        usdcPrice = new MockPriceSource(1e18);
 
         registry.setAssetConfig(
             MON,
@@ -113,5 +115,29 @@ contract RiskEngineTest is TestBase {
         RiskTypes.StressResult memory stress = engine.stressScenario(ACCOUNT, adapters, shocks);
         assertTrue(stress.pnlUsd == -int256(2e18), "scenario should shock net MON only");
         assertEq(stress.lossUsd, 2e18, "wrong custom stress loss");
+    }
+
+    function testStalePriceFailsClosed() public {
+        uint256 observedAt = block.timestamp;
+        monPrice.set(2e18, observedAt);
+        vm.warp(observedAt + 1 days + 1);
+
+        bytes memory expected = abi.encodeWithSelector(RiskRegistry.StalePrice.selector, MON, observedAt);
+        vm.expectRevert(expected);
+        registry.priceE18(MON);
+    }
+
+    function testPerpWithoutInstrumentMappingFailsClosed() public {
+        bytes32 unknown = keccak256("UNMAPPED-PERP");
+        MockRiskAdapter unmapped =
+            new MockRiskAdapter(keccak256("UNMAPPED"), address(0), unknown, CLTypes.PositionType.PERP);
+        unmapped.seed(ACCOUNT, int256(1e18), 1e6, 0, 0);
+
+        address[] memory adapters = new address[](1);
+        adapters[0] = address(unmapped);
+
+        bytes memory expected = abi.encodeWithSelector(RiskEngine.MissingInstrumentConfig.selector, unknown);
+        vm.expectRevert(expected);
+        engine.portfolio(ACCOUNT, adapters);
     }
 }
