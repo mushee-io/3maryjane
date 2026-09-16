@@ -1,6 +1,10 @@
 # CL Monad Deployment Checklist
 
-This checklist is intentionally fail-closed. Do not replace missing addresses, markets, feeds or vaults with guessed values.
+The full Metropolis proof is now pinned to **Monad mainnet (chain 143)**.
+
+Reason: Kuru and Perpl are available on both mainnet and testnet, but the verified Euler deployment carried by this repository is Monad mainnet. A Kuru + Perpl testnet dry-run is still useful, but it must not be presented as the full three-venue clearing demo.
+
+This checklist is fail-closed. Do not replace missing addresses, markets, feeds or vaults with guessed values.
 
 ## 0. Preflight
 
@@ -10,11 +14,14 @@ This checklist is intentionally fail-closed. Do not replace missing addresses, m
 - `npm install --ignore-scripts`
 - `npm run typecheck`
 - `npm run build:apps`
-- confirm the intended Monad chain ID (`10143` testnet or `143` mainnet)
+- export your ignored local `.env`
+- run `npm run preflight:protocols`
+- confirm `CL_DEMO_CHAIN_ID=143`
 - re-verify Kuru, Perpl, Euler and oracle addresses from primary sources
-- verify Perpl position/collateral/PnL unit conventions before setting risk decimals
 - use a fresh low-value deployment wallet for the demo
 - never commit `PRIVATE_KEY`
+
+The preflight validator refuses the full demo profile when the chain is not 143 and checks the pinned Kuru margin account, Perpl exchange/collateral and Euler EVC before broadcast.
 
 ## 1. Environment
 
@@ -25,18 +32,18 @@ Required tracking values are CSV lists:
 ```text
 KURU_TRACKED_TOKENS=0xTokenA,0xTokenB
 KURU_MARKETS=0xMarketA
-PERPL_TRACKED_PERP_IDS=64
+PERPL_TRACKED_PERP_IDS=10
 EULER_TRACKED_VAULTS=0xVaultA
-FREE_COLLATERAL_ASSETS=0xStablecoin,0xWrappedMon
+FREE_COLLATERAL_ASSETS=0xCollateralA,0xCollateralB
 ```
 
-The deployment scripts reject empty tracked sets. That is deliberate: a live adapter with no read universe would let execution exist without corresponding portfolio visibility. `FREE_COLLATERAL_ASSETS` feeds the read-only `WalletBalanceAdapter`, which keeps assets sitting directly in the CL Account visible to portfolio risk.
+The deployment scripts reject empty tracked sets. A live adapter with no read universe would allow execution without corresponding portfolio visibility.
 
 ## 2. Deploy core
 
 ```bash
 forge script script/DeployCore.s.sol:DeployCore \
-  --rpc-url "$MONAD_TESTNET_RPC" \
+  --rpc-url "$MONAD_MAINNET_RPC" \
   --broadcast -vvvv
 ```
 
@@ -45,13 +52,13 @@ Record:
 - `AdapterRegistry`
 - `CLAccountFactory`
 
-Set `ADAPTER_REGISTRY` before continuing.
+Set `ADAPTER_REGISTRY` and `CL_ACCOUNT_FACTORY` before continuing.
 
 ## 3. Deploy adapters + free-collateral source
 
 ```bash
 forge script script/DeployAdapters.s.sol:DeployAdapters \
-  --rpc-url "$MONAD_TESTNET_RPC" \
+  --rpc-url "$MONAD_MAINNET_RPC" \
   --broadcast -vvvv
 ```
 
@@ -64,15 +71,13 @@ Record:
 
 Set `KURU_ADAPTER`, `PERPL_ADAPTER`, `EULER_ADAPTER`, and `WALLET_BALANCE_ADAPTER`.
 
-The wallet-balance adapter is a read-only risk source; it does not need execution permissions or normal adapter authorization to contribute to a policy's configured risk universe.
-
 ## 4. Configure exact execution permissions
 
-Run **before any account authorizes an executable adapter**:
+Run **before any account authorizes an adapter**:
 
 ```bash
 forge script script/ConfigureAdapterPermissions.s.sol:ConfigureAdapterPermissions \
-  --rpc-url "$MONAD_TESTNET_RPC" \
+  --rpc-url "$MONAD_MAINNET_RPC" \
   --broadcast -vvvv
 ```
 
@@ -83,81 +88,93 @@ This configures:
 - exact function selectors
 - selector enforcement
 
-Every permission change increments the adapter version. If permissions change later, existing user authorizations intentionally become stale.
+Every permission change increments the adapter version. If permissions change later, existing account authorizations intentionally become stale until the owner re-authorizes the adapter.
 
 ## 5. Deploy risk + automation stack
 
 ```bash
 forge script script/DeployRiskAutomation.s.sol:DeployRiskAutomation \
-  --rpc-url "$MONAD_TESTNET_RPC" \
+  --rpc-url "$MONAD_MAINNET_RPC" \
   --broadcast -vvvv
 ```
 
-Record all emitted addresses and populate the `CL_*` / `VITE_CL_*` environment variables.
+Record every emitted address and populate the `CL_*` / `VITE_CL_*` environment variables.
 
-Set `RISK_REGISTRY` to the deployed risk registry before the next step.
+## 6. Configure the risk universe
 
-## 6. Configure the Metropolis risk universe
+Fill and verify:
 
-For the primary demo pair, `.env.example` exposes explicit values for:
-
-- underlying asset + Chainlink-compatible feed
-- collateral asset + feed
+- `RISK_REGISTRY`
+- primary underlying token + feed
+- collateral token + feed
 - token decimals
-- initial margin
-- maintenance margin
-- hedge/basis margin
-- stress shock
-- maximum feed staleness
-- Perpl exposure/collateral/PnL decimals
+- initial / maintenance / hedge margin parameters
+- stress parameters
+- maximum oracle staleness
+- Perpl exposure / collateral / PnL unit conventions
+- tracked Perpl market IDs
 
-After independently verifying those values, run:
+Then run:
 
 ```bash
 forge script script/ConfigureDemoRisk.s.sol:ConfigureDemoRisk \
-  --rpc-url "$MONAD_TESTNET_RPC" \
+  --rpc-url "$MONAD_MAINNET_RPC" \
   --broadcast -vvvv
 ```
 
-The script deploys CL `ChainlinkPriceSource` wrappers, configures the underlying/collateral assets, and maps every `PERPL_TRACKED_PERP_IDS` entry to the configured economic underlying and collateral asset.
+A missing asset, derivative mapping or stale/invalid price is expected to fail closed.
 
-For a broader deployment, configure every additional asset and derivative used by tracked Kuru tokens, Euler vault assets and Perpl instruments before enabling the risk guard. A missing mapping is expected to fail closed.
+## 7. Create and initialize the CL Account
 
-## 7. Create and initialize CL Account
+Choose a unique 32-byte `CL_ACCOUNT_SALT`, fill `CL_ALLOWED_ASSETS` and review all `CL_POLICY_*` values.
 
-Create the account from `CLAccountFactory` using the owner's chosen salt.
+Run deployment preflight after all CL addresses are populated:
 
-Then, in this order:
+```bash
+npm run preflight:deployment
+```
 
-1. allow required wallet assets
-2. authorize Kuru / Perpl / Euler adapters **after registry configuration is final**
-3. configure the account risk policy using Kuru, Perpl, Euler **and `WalletBalanceAdapter`** as risk sources
-4. install/enable `RiskPolicyManager` as the risk guard
-5. optionally authorize the `DefensiveExecutor` as defensive operator
-6. create keeper jobs only after the defensive path is tested manually
+Then initialize:
 
-Do not authorize `WalletBalanceAdapter` for account execution; it is intentionally source-only.
+```bash
+forge script script/InitializeDemoAccount.s.sol:InitializeDemoAccount \
+  --rpc-url "$MONAD_MAINNET_RPC" \
+  --broadcast -vvvv
+```
+
+The script:
+
+1. creates the deterministic owner-controlled CL Account;
+2. allowlists the configured wallet assets;
+3. authorizes Kuru, Perpl and Euler at their current registry versions;
+4. includes Kuru, Perpl, Euler and WalletBalanceAdapter in the risk universe;
+5. installs the owner-defined portfolio policy;
+6. enables `RiskPolicyManager` as the account risk guard;
+7. authorizes `DefensiveExecutor` for strictly risk-reducing automation.
+
+It does **not** fund the account and does not move user assets.
+
+Record the CL Account address and run `npm run preflight` one final time.
 
 ## 8. Funded smoke test
 
-Use the smallest practical amounts.
+Use the smallest practical values. Mainnet makes every mistake real.
 
 Required proof sequence:
 
-1. deposit/fund a CL Account
-2. confirm free collateral appears through `WalletBalanceAdapter`
-3. Kuru: fund margin and execute a spot action
-4. Perpl: create/fund account and open a small perp position
-5. Euler: supply collateral and borrow or repay
-6. query CL unified risk
-7. confirm all three venue states plus direct free collateral are visible
-8. run a stress scenario
-9. create a deliberate low-severity policy breach or test condition
-10. obtain solver recommendation
-11. execute a defensive action
-12. confirm post-state risk improvement
+1. fund the CL Account with the configured collateral;
+2. Kuru: deposit/fund margin and execute the configured MON spot action;
+3. Perpl: create/fund the exchange account and open a small MON perp position;
+4. Euler: supply collateral and make one small borrow/repay transition in a verified vault;
+5. query CL unified risk;
+6. confirm all venue states plus free collateral are visible;
+7. run a stress scenario;
+8. attempt a low-severity policy-violating state transition and show it reverts;
+9. obtain a solver recommendation;
+10. execute a permitted defensive action;
+11. confirm the resulting portfolio is strictly safer.
 
-Capture transaction hashes for every state-changing step.
+Capture transaction hashes for every state-changing operation.
 
 ## 9. Negative security smoke tests
 
@@ -167,11 +184,10 @@ Before recording the final demo:
 - unapproved target reverts
 - stale adapter authorization reverts
 - unauthorized keeper reverts
-- defensive action that increases risk reverts
+- delegated defense that increases risk reverts
 - stale oracle observation reverts
 - withdrawal violating policy reverts atomically
 - malformed adapter action reverts
-- configured venue read failure fails closed
 - downstream protocol revert leaves no partial CL state
 
 ## 10. API + Terminal
@@ -189,22 +205,26 @@ Terminal:
 npm --workspace @cl-monad/terminal run build
 ```
 
-Populate `CL_*_ADAPTER` and `VITE_CL_*_ADAPTER` values so both surfaces display the same integration set. Verify the Terminal and API point at the same chain and CL deployment addresses.
+Verify both are configured for chain `143` and the exact same deployed CL contracts.
 
 ## 11. Final evidence bundle
 
-Keep a deployment manifest in `deployments/` containing:
+Create a deployment manifest under `deployments/` containing:
 
-- chain ID
+- chain ID (`143`)
 - deployment timestamp/block
 - all CL contract addresses
-- all four risk/adapter source addresses
-- underlying Kuru/Perpl/Euler targets
-- tracked markets/perp IDs/vaults/free-collateral assets
+- all adapter addresses
+- Kuru / Perpl / Euler execution targets
+- tracked markets / perp IDs / vaults
 - oracle sources
 - registry adapter versions
 - CL Account address
 - demo transaction hashes
 - final CI commit SHA
 
-No deployment should be described as live/complete until the funded transactions are confirmed on the intended Monad network.
+No deployment may be described as live/complete until every funded transaction is confirmed on Monad mainnet.
+
+## Testnet dry-run boundary
+
+Monad testnet (`10143`) remains valuable for Kuru + Perpl integration tests. The SDK contains current Kuru testnet contract/token constants and Perpl's published testnet exchange configuration. However, the repository does not claim an Euler testnet deployment. Therefore a testnet run is a **two-venue dry-run**, not the final CL clearing proof.
