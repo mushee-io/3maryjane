@@ -17,6 +17,8 @@ jobs:
         with:
           version: stable
       - name: Forge build
-        run: forge build --sizes
+        run: forge build
+      - name: Deployable contract sizes
+        run: forge build --sizes --skip script --skip test
       - name: Forge tests
         run: forge test -vvv
