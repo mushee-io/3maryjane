@@ -26,6 +26,13 @@
 - [x] M22 Automated defensive actions
 - [x] M23 Keeper network
 - [x] M24 Simulation engine
+- [x] M25 Production SDK surface
+- [x] M26 Public Risk API
+- [x] M27 Protocol onboarding framework
+- [x] M28 CL Terminal
+- [x] M29 Security hardening pass
+- [x] M30 Production deployment/demo tooling
+- [ ] M30 Live funded Monad broadcast + transaction evidence
 
 ## M11-M17 implementation notes
 
@@ -57,13 +64,34 @@ The decision/automation stack is implemented in `IntentEngine`, `CapitalRouter`,
 
 See `docs/INTENT_AUTOMATION.md` for the M18-M24 architecture and trust boundaries.
 
-M10-M24 are compiler/test targeted. The real funded Monad demonstration still requires deployment, verified network-specific market/vault/feed configuration, funded accounts, and successful live Kuru -> Perpl -> Euler transactions.
+## M25-M29 implementation notes
 
-## Next
+The product and integration surface is now part of the repository rather than a separate future phase.
 
-- [ ] M25 SDK
-- [ ] M26 Public Risk API
-- [ ] M27 Protocol onboarding framework
-- [ ] M28 CL Terminal
-- [ ] M29 Security hardening
-- [ ] M30 Metropolis production demo
+- The TypeScript SDK exports a stable `CLClient` interface instead of leaking package-manager-specific viem inference types into declarations.
+- SDK lifecycle methods cover deterministic account prediction/creation, adapter authorization, wallet-asset permissions, policy configuration, per-asset limits, risk reads, solver reads, intents, owner execution and withdrawals.
+- The Public Risk API exposes account, policy, unified risk, solver and protocol deployment reads over a read-only HTTP surface.
+- The onboarding standard validates Monad chain IDs, execution targets and optional exact selector-permission manifests.
+- `ConfigureAdapterPermissions.s.sol` configures Kuru, Perpl and Euler with explicit target + function-selector permissions before users authorize adapters.
+- Adapter permission mutations bump registry versions, invalidating stale user authorization.
+- Kuru/Perpl/Euler deployment requires explicit tracked tokens/perp IDs/vaults instead of silently deploying an empty read universe.
+- Perpl configured position reads fail closed rather than hiding a venue read failure from CL risk.
+- The CL Terminal reads the live unified portfolio, policy and solver state and can submit owner-authorized adapter execution through `CLAccount`.
+- `docs/THREAT_MODEL.md` records the trust boundaries and residual risks; this is security hardening documentation, not an external audit.
+
+CI covers Forge compilation, deployable bytecode sizes, the Solidity test suite, TypeScript typechecking and production SDK/API/Terminal builds.
+
+## M30 boundary
+
+The repository contains the production deployment scripts, exact adapter permission configuration, environment template, deployment evidence format, fail-closed deployment checklist and Metropolis demo runbook.
+
+The final checkbox remains deliberately open because it is an external onchain operation rather than a code milestone. It requires:
+
+1. re-verifying the selected Monad network's Kuru, Perpl, Euler and oracle addresses against primary protocol sources;
+2. broadcasting the contracts from an authorized funded signer;
+3. creating and funding a CL Account;
+4. completing real Kuru, Perpl and Euler state transitions;
+5. recording confirmed transaction hashes and final deployed addresses in `deployments/`;
+6. showing the same live state through the API and CL Terminal.
+
+No mocked transaction, guessed address or fabricated hash may be used to close the live M30 checkbox.
