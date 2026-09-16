@@ -129,21 +129,17 @@ contract PerplAdapter is BaseAdapter {
         revert InvalidAction();
     }
 
+    /// @dev Configured Perpl reads deliberately fail closed. A deployment must create the Perpl
+    ///      account and verify every tracked perp id before adding this adapter to an enforced risk policy.
     function getPositions(address account)
         external
         view
         override
         returns (CLTypes.Position[] memory positions)
     {
-        IPerplExchange.AccountInfo memory info;
-        try exchange.getAccountByAddr(account) returns (IPerplExchange.AccountInfo memory accountInfo) {
-            info = accountInfo;
-        } catch {
-            return new CLTypes.Position[](0);
-        }
-
+        IPerplExchange.AccountInfo memory info = exchange.getAccountByAddr(account);
         positions = new CLTypes.Position[](_trackedPerpIds.length + 1);
-        uint256 count;
+        uint256 count = 0;
 
         if (info.balanceCNS != 0 || info.lockedBalanceCNS != 0) {
             positions[count++] = CLTypes.Position({
@@ -160,40 +156,38 @@ contract PerplAdapter is BaseAdapter {
             });
         }
 
-        for (uint256 i; i < _trackedPerpIds.length; ++i) {
+        for (uint256 i = 0; i < _trackedPerpIds.length; ++i) {
             uint256 perpId = _trackedPerpIds[i];
-            try exchange.getPositionV2(perpId, info.accountId) returns (
+            (
                 IPerplExchange.PositionInfoV2 memory p,
                 uint256 markPricePNS,
                 bool markPriceValid
-            ) {
-                if (p.lotLNS == 0) continue;
-                int256 size = _toInt(p.lotLNS);
-                if (p.positionType == 1) size = -size;
-                positions[count++] = CLTypes.Position({
-                    protocolId: PROTOCOL_ID,
-                    instrumentId: keccak256(abi.encode(PROTOCOL_ID, "PERP", perpId)),
-                    asset: address(0),
-                    positionType: CLTypes.PositionType.PERP,
-                    signedExposure: size,
-                    notional: 0,
-                    collateral: p.depositCNS,
-                    debt: 0,
-                    pnl: p.pnlCNS,
-                    metadata: abi.encode(
-                        perpId,
-                        p.positionType,
-                        p.pricePNS,
-                        p.priceResiduePNSQ16,
-                        markPricePNS,
-                        markPriceValid,
-                        p.deltaPnlCNS,
-                        p.premiumPnlCNS
-                    )
-                });
-            } catch {
-                // A missing/unsupported market does not poison the entire portfolio snapshot.
-            }
+            ) = exchange.getPositionV2(perpId, info.accountId);
+
+            if (p.lotLNS == 0) continue;
+            int256 size = _toInt(p.lotLNS);
+            if (p.positionType == 1) size = -size;
+            positions[count++] = CLTypes.Position({
+                protocolId: PROTOCOL_ID,
+                instrumentId: keccak256(abi.encode(PROTOCOL_ID, "PERP", perpId)),
+                asset: address(0),
+                positionType: CLTypes.PositionType.PERP,
+                signedExposure: size,
+                notional: 0,
+                collateral: p.depositCNS,
+                debt: 0,
+                pnl: p.pnlCNS,
+                metadata: abi.encode(
+                    perpId,
+                    p.positionType,
+                    p.pricePNS,
+                    p.priceResiduePNSQ16,
+                    markPricePNS,
+                    markPriceValid,
+                    p.deltaPnlCNS,
+                    p.premiumPnlCNS
+                )
+            });
         }
 
         assembly {
