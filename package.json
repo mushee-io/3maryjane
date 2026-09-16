@@ -1,0 +1,5 @@
+{
+  "name": "cl-monad",
+  "private": true,
+  "workspaces": ["packages/*"]
+}
