@@ -61,9 +61,7 @@ export function validateProtocolManifest(input: ProtocolManifest): ManifestValid
       if (!normalizedTargets.has(normalizedTarget)) {
         errors.push(`permission target ${permission.target} is not declared in targets`);
       }
-      if (permission.selectors.length === 0) {
-        errors.push(`permission target ${permission.target} has no selectors`);
-      }
+      if (permission.selectors.length === 0) errors.push(`permission target ${permission.target} has no selectors`);
       for (const selector of permission.selectors) {
         if (!selectorPattern.test(selector)) errors.push(`invalid 4-byte selector ${selector}`);
       }
@@ -75,17 +73,20 @@ export function validateProtocolManifest(input: ProtocolManifest): ManifestValid
 
   if (errors.length !== 0) return { ok: false, errors };
 
-  return {
-    ok: true,
-    errors: [],
-    normalized: {
-      ...input,
-      adapter: getAddress(input.adapter) as Address,
-      targets: uniqueAddresses(input.targets),
-      targetPermissions: input.targetPermissions ? normalizePermissions(input.targetPermissions) : undefined,
-      assets: uniqueAddresses(input.assets),
-    },
+  const normalized: ProtocolManifest = {
+    id: input.id,
+    displayName: input.displayName,
+    adapter: getAddress(input.adapter) as Address,
+    chainId: input.chainId,
+    positionTypes: [...input.positionTypes],
+    targets: uniqueAddresses(input.targets),
+    assets: uniqueAddresses(input.assets),
+    ...(input.targetPermissions ? { targetPermissions: normalizePermissions(input.targetPermissions) } : {}),
+    ...(input.docsUrl !== undefined ? { docsUrl: input.docsUrl } : {}),
+    ...(input.metadata !== undefined ? { metadata: { ...input.metadata } } : {}),
   };
+
+  return { ok: true, errors: [], normalized };
 }
 
 export function assertProtocolManifest(input: ProtocolManifest): ProtocolManifest {
