@@ -8,6 +8,7 @@ interface Vm {
     function expectRevert(bytes4) external;
     function expectRevert(bytes calldata) external;
     function deal(address, uint256) external;
+    function warp(uint256) external;
 }
 
 abstract contract TestBase {
