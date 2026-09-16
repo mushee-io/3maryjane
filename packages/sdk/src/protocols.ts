@@ -39,15 +39,21 @@ export const kuru = {
     },
   },
   10143: {
-    marginAccount: "0xd029C2D98ff85D8F64799017fE00a59B1159CE02",
-    router: "0x7EFbE105Ca7415dE98F96622173458ac1c054630",
-    forwarder: "0x681bB1508E14433b148a2549ba2726454aDc9BB4",
+    // Current official Kuru testnet contracts. Testnet market addresses are intentionally
+    // not hardcoded here because Kuru's public contract-address page does not publish a
+    // canonical MON/USDC testnet market. Discover/verify the chosen market at deploy time.
+    marginAccount: "0xdDDaBd30785bA8b45e434a1f134BDf304d6125d9",
+    router: "0x1f5A250c4A506DA4cE584173c6ed1890B1bf7187",
+    forwarder: "0xa21ca7b4e308e9E2dC4C60620572792634EA21a0",
     tokens: {
-      USDC: "0x3bA3d39AFcf8bb994f7964B3e0171Ea2Ba361570",
+      USDC: "0xf817257fed379853cDe0fa4F97AB987181B1E5Ea",
+      kUSDC: "0xf817257fed379853cDe0fa4F97AB987181B1E5Ea",
+      USDT: "0x88b8E2161DEDC77EF4ab7585569D2415a1C1055D",
+      DAK: "0x0F0BDEbF0F83cD1EE3974779Bcb7315f9808c714",
+      CHOG: "0xE0590015A873bF326bd645c3E1266d4db41C4E6B",
+      YAKI: "0xfe140e1dCe99Be9F4F15d657CD9b7BF622270C50",
     },
-    markets: {
-      "MON-USDC": "0xa241896A7Dbe8a550D2E5fF7A914bB1989ceD2D9",
-    },
+    markets: {},
   },
 } as const satisfies Record<number, KuruDeployment>;
 
@@ -68,6 +74,8 @@ export const perpl = {
   },
 } as const satisfies Record<number, PerplDeployment>;
 
+// Euler is currently modeled only where the repository has a verified Monad deployment:
+// Monad mainnet (chain 143). Do not infer an Euler testnet deployment from this object.
 export const euler = {
   143: {
     evc: "0x7a9324E8f270413fa2E458f5831226d99C7477CD",
