@@ -70,7 +70,7 @@ contract SolverSimulationTest is TestBase {
         policyManager.configure(address(account), policy_, covered);
     }
 
-    function testSolverProducesHedgeRecommendationForGrossBreach() public view {
+    function testSolverProducesHedgeRecommendationForGrossBreach() public {
         RiskSolver solver = new RiskSolver(address(policyManager));
         (RiskSolver.Recommendation memory r, RiskTypes.PortfolioMetrics memory m,) =
             solver.solve(address(account));
@@ -84,7 +84,7 @@ contract SolverSimulationTest is TestBase {
         assertEq(m.grossExposureUsd, 6e18, "wrong live gross exposure");
     }
 
-    function testSimulationProjectsImprovedHealthAfterDeleveraging() public view {
+    function testSimulationProjectsImprovedHealthAfterDeleveraging() public {
         SimulationEngine simulator = new SimulationEngine(address(riskEngine));
         address[] memory adapters = new address[](1);
         adapters[0] = address(riskAdapter);
