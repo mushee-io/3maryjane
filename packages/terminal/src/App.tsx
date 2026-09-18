@@ -98,7 +98,7 @@ export default function App() {
   const [actionInput, setActionInput] = useState("0x");
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("Enter a deployed Three Mary Jane account to read its unified book.");
+  const [message, setMessage] = useState("Enter a deployed 3maryjane account to read its unified book.");
 
   const account = isAddress(accountInput) ? (getAddress(accountInput) as Address) : null;
 
@@ -127,11 +127,11 @@ export default function App() {
 
   async function refresh() {
     if (!account) {
-      setMessage("Enter a valid Three Mary Jane account address.");
+      setMessage("Enter a valid 3maryjane account address.");
       return;
     }
     setBusy(true);
-    setMessage("Reading Three Mary Jane clearing state…");
+    setMessage("Reading 3maryjane clearing state…");
     try {
       const [state, nextRisk, nextPolicy, solver] = await Promise.all([
         reader.getAccountState(account),
@@ -153,7 +153,7 @@ export default function App() {
 
   async function executeRawAction() {
     if (!account || !walletClient || !walletAddress) {
-      setMessage("Connect the owner wallet and enter a valid Three Mary Jane account first.");
+      setMessage("Connect the owner wallet and enter a valid 3maryjane account first.");
       return;
     }
     if (!isAddress(adapterInput) || !/^0x[0-9a-fA-F]*$/.test(actionInput) || actionInput.length % 2 !== 0) {
@@ -189,7 +189,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand-lockup">
           <div className="eyebrow">MONAD / CAPITAL + CLEARING</div>
-          <h1>THREE MARY JANE</h1>
+          <h1>3maryjane</h1>
         </div>
         <nav className="product-nav" aria-label="Product">
           <a href="#clearing">CLEARING</a>
@@ -206,11 +206,11 @@ export default function App() {
       <main id="clearing">
         <section className="hero-grid">
           <div>
-            <p className="kicker">THREE MARY JANE / CLEARING ENGINE</p>
+            <p className="kicker">3maryjane / CLEARING ENGINE</p>
             <h2>One account.<br />Every market.<br /><span>One risk layer.</span></h2>
           </div>
           <div className="account-box">
-            <label>THREE MARY JANE ACCOUNT</label>
+            <label>3maryjane ACCOUNT</label>
             <div className="input-row">
               <input
                 value={accountInput}
@@ -314,7 +314,7 @@ export default function App() {
               <p className="kicker">AI BOT TRADING ARENA</p>
               <h3>Strategies enter.<br />Bots compete.<br /><span>Only performance survives.</span></h3>
               <p className="mary-jane-description">
-                Mary Jane is the upcoming autonomous trading engine inside Three Mary Jane. Traders will be able to deploy or select AI trading bots, define risk boundaries, and put strategies head-to-head across Monad markets.
+                Mary Jane is the upcoming autonomous trading engine inside 3maryjane. Traders will be able to deploy or select AI trading bots, define risk boundaries, and put strategies head-to-head across Monad markets.
               </p>
             </div>
             <div className="mary-jane-spec">
@@ -333,7 +333,7 @@ export default function App() {
       </main>
 
       <footer>
-        <span>THREE MARY JANE / MONAD</span>
+        <span>3maryjane / MONAD</span>
         <span>NON-CUSTODIAL · CROSS-PROTOCOL · FAIL-CLOSED</span>
       </footer>
     </div>
