@@ -98,7 +98,7 @@ export default function App() {
   const [actionInput, setActionInput] = useState("0x");
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("Enter a deployed CL Account to read its unified book.");
+  const [message, setMessage] = useState("Enter a deployed Three Mary Jane account to read its unified book.");
 
   const account = isAddress(accountInput) ? (getAddress(accountInput) as Address) : null;
 
@@ -127,11 +127,11 @@ export default function App() {
 
   async function refresh() {
     if (!account) {
-      setMessage("Enter a valid CL Account address.");
+      setMessage("Enter a valid Three Mary Jane account address.");
       return;
     }
     setBusy(true);
-    setMessage("Reading Monad clearing state…");
+    setMessage("Reading Three Mary Jane clearing state…");
     try {
       const [state, nextRisk, nextPolicy, solver] = await Promise.all([
         reader.getAccountState(account),
@@ -153,7 +153,7 @@ export default function App() {
 
   async function executeRawAction() {
     if (!account || !walletClient || !walletAddress) {
-      setMessage("Connect the owner wallet and enter a valid CL Account first.");
+      setMessage("Connect the owner wallet and enter a valid Three Mary Jane account first.");
       return;
     }
     if (!isAddress(adapterInput) || !/^0x[0-9a-fA-F]*$/.test(actionInput) || actionInput.length % 2 !== 0) {
@@ -168,7 +168,7 @@ export default function App() {
       setTxHash(hash);
       setMessage("Transaction submitted. Waiting for Monad confirmation…");
       await publicClient.waitForTransactionReceipt({ hash });
-      setMessage("Execution confirmed and post-trade CL risk validation passed.");
+      setMessage("Execution confirmed and post-trade portfolio risk validation passed.");
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Execution failed");
@@ -187,10 +187,14 @@ export default function App() {
   return (
     <div className="shell">
       <header className="topbar">
-        <div>
-          <div className="eyebrow">MONAD / CLEARING INFRASTRUCTURE</div>
-          <h1>CL</h1>
+        <div className="brand-lockup">
+          <div className="eyebrow">MONAD / CAPITAL + CLEARING</div>
+          <h1>THREE MARY JANE</h1>
         </div>
+        <nav className="product-nav" aria-label="Product">
+          <a href="#clearing">CLEARING</a>
+          <a href="#mary-jane">MARY JANE <span>SOON</span></a>
+        </nav>
         <div className="top-actions">
           <div className="network-dot"><span />{chain.name} · {chain.id}</div>
           <button className="button secondary" onClick={connectWallet}>
@@ -199,14 +203,14 @@ export default function App() {
         </div>
       </header>
 
-      <main>
+      <main id="clearing">
         <section className="hero-grid">
           <div>
-            <p className="kicker">MONAD CLEARING NETWORK</p>
+            <p className="kicker">THREE MARY JANE / CLEARING ENGINE</p>
             <h2>One account.<br />Every market.<br /><span>One risk layer.</span></h2>
           </div>
           <div className="account-box">
-            <label>CL ACCOUNT</label>
+            <label>THREE MARY JANE ACCOUNT</label>
             <div className="input-row">
               <input
                 value={accountInput}
@@ -225,7 +229,7 @@ export default function App() {
           <Metric label="GROSS EXPOSURE" value={usd(metrics?.grossExposureUsd)} />
           <Metric label="NET DIRECTIONAL" value={usd(metrics?.directionalExposureUsd)} />
           <Metric label="LEVERAGE" value={ratio(metrics?.leverageE18)} />
-          <Metric label="CL HEALTH" value={ratio(metrics?.healthE18)} emphasis />
+          <Metric label="PORTFOLIO HEALTH" value={ratio(metrics?.healthE18)} emphasis />
           <Metric label="CRITICAL MOVE" value={percentBps(metrics?.criticalMoveBps)} />
         </section>
 
@@ -267,7 +271,7 @@ export default function App() {
             <div className="panel-title"><span>03</span> VENUES + RISK SOURCES</div>
             {protocolCards.map(([name, venue, adapter]) => (
               <div className="venue" key={name}>
-                <div><strong>{name}</strong><small>{venue ? short(venue) : "direct CL Account balances"}</small></div>
+                <div><strong>{name}</strong><small>{venue ? short(venue) : "direct account balances"}</small></div>
                 <div className="venue-right"><span className={adapter ? "light active" : "light"} />{adapter ? short(adapter) : "adapter pending"}</div>
               </div>
             ))}
@@ -288,18 +292,48 @@ export default function App() {
 
         <section className="panel execution-panel">
           <div className="panel-title"><span>05</span> OWNER EXECUTION CONSOLE</div>
-          <p className="warning">Raw adapter execution is intentionally explicit. CLAccount still enforces adapter authorization, target allowlists, selector permissions and the post-trade risk policy onchain.</p>
+          <p className="warning">Raw adapter execution is intentionally explicit. The account still enforces adapter authorization, target allowlists, selector permissions and post-trade portfolio risk onchain.</p>
           <div className="execution-grid">
             <label>ADAPTER<input value={adapterInput} onChange={(e) => setAdapterInput(e.target.value)} placeholder="0x adapter" /></label>
             <label>ACTION CALLDATA<textarea value={actionInput} onChange={(e) => setActionInput(e.target.value)} rows={3} /></label>
-            <button className="button danger-button" disabled={busy || !walletAddress} onClick={executeRawAction}>EXECUTE THROUGH CL</button>
+            <button className="button danger-button" disabled={busy || !walletAddress} onClick={executeRawAction}>EXECUTE</button>
           </div>
           {txHash && <div className="tx mono">TX {txHash}</div>}
+        </section>
+
+        <section className="mary-jane" id="mary-jane">
+          <div className="mary-jane-head">
+            <div>
+              <div className="panel-title"><span>06</span> MARY JANE</div>
+              <p className="coming-pill">COMING SOON</p>
+            </div>
+            <div className="mary-jane-number">MJ</div>
+          </div>
+          <div className="mary-jane-grid">
+            <div className="mary-jane-copy">
+              <p className="kicker">AI BOT TRADING ARENA</p>
+              <h3>Strategies enter.<br />Bots compete.<br /><span>Only performance survives.</span></h3>
+              <p className="mary-jane-description">
+                Mary Jane is the upcoming autonomous trading engine inside Three Mary Jane. Traders will be able to deploy or select AI trading bots, define risk boundaries, and put strategies head-to-head across Monad markets.
+              </p>
+            </div>
+            <div className="mary-jane-spec">
+              <div><span>01</span><strong>BOT VS BOT</strong><small>Autonomous strategies compete against each other.</small></div>
+              <div><span>02</span><strong>RISK-BOUND EXECUTION</strong><small>Each bot operates inside explicit portfolio limits.</small></div>
+              <div><span>03</span><strong>VERIFIABLE PERFORMANCE</strong><small>Execution and results settle against onchain market state.</small></div>
+              <div><span>04</span><strong>MON BUYBACK + BURN</strong><small>Platform fees are planned to fund MON market buybacks and burns.</small></div>
+            </div>
+          </div>
+          <div className="mary-jane-footer">
+            <span>MARY JANE ENGINE</span>
+            <span>AI TRADING · COMPETITIVE STRATEGIES · MONAD</span>
+            <span>COMING SOON</span>
+          </div>
         </section>
       </main>
 
       <footer>
-        <span>CL / MONAD CLEARING NETWORK</span>
+        <span>THREE MARY JANE / MONAD</span>
         <span>NON-CUSTODIAL · CROSS-PROTOCOL · FAIL-CLOSED</span>
       </footer>
     </div>
