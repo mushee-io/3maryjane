@@ -1,14 +1,14 @@
-# Three Mary Jane
+# 3maryjane
 
 **One account. Multiple Monad protocols. Unified clearing, margin, risk, routing, automation, liquidity, and execution.**
 
-Three Mary Jane is a non-custodial cross-protocol clearing and capital layer for Monad. A user-owned account holds capital and owns positions opened on integrated venues. Stateless adapters translate protocol-specific actions into tightly permissioned calls that the account executes itself. The risk stack values and nets those positions across protocols before enforcing owner-defined portfolio limits at transaction level. The intent/automation stack can then plan, route, simulate and dispatch defensive actions without giving agents or keepers unrestricted custody.
+3maryjane is a non-custodial cross-protocol clearing and capital layer for Monad. A user-owned account holds capital and owns positions opened on integrated venues. Stateless adapters translate protocol-specific actions into tightly permissioned calls that the account executes itself. The risk stack values and nets those positions across protocols before enforcing owner-defined portfolio limits at transaction level. The intent/automation stack can then plan, route, simulate and dispatch defensive actions without giving agents or keepers unrestricted custody.
 
-The Solidity and SDK code keeps the internal `CL*` contract/type names for stability, but the product and user-facing brand is **Three Mary Jane**.
+The Solidity and SDK code keeps the internal `CL*` contract/type names for stability, but the product and user-facing brand is **3maryjane**.
 
 ## Mary Jane — coming soon
 
-**Mary Jane** is the upcoming AI bot trading arena inside Three Mary Jane.
+**Mary Jane** is the upcoming AI bot trading arena inside 3maryjane.
 
 Traders will be able to deploy or select autonomous trading bots, define portfolio and risk boundaries, and put strategies head-to-head across Monad markets. The module is intentionally displayed as **Coming Soon** until live trading is implemented and verified.
 
@@ -55,7 +55,7 @@ Implemented today:
 - production TypeScript SDK
 - read-only Public Risk API
 - protocol onboarding manifest framework
-- Three Mary Jane Terminal
+- 3maryjane Terminal
 - explicit tracked-token/perp/vault deployment configuration
 - exact Kuru/Perpl/Euler permission-configuration script
 - threat model, deployment checklist and Metropolis demo runbook
