@@ -7,6 +7,8 @@ import {
   getAddress,
   http,
   isAddress,
+  keccak256,
+  stringToHex,
   type WalletClient,
 } from "viem";
 import {
@@ -98,9 +100,18 @@ export default function App() {
   const [actionInput, setActionInput] = useState("0x");
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("Enter a deployed 3maryjane account to read its unified book.");
+  const [message, setMessage] = useState("Connect a wallet, then load or create a deployed 3maryjane account.");
 
   const account = isAddress(accountInput) ? (getAddress(accountInput) as Address) : null;
+  const coreConfigured = Boolean(deployment.accountFactory && deployment.adapterRegistry);
+  const riskConfigured = Boolean(deployment.riskEngine && deployment.riskPolicyManager && deployment.riskSolver);
+  const configuredAdapterCount = Object.keys(deployment.adapters ?? {}).length;
+  const missingConfig = [
+    !deployment.accountFactory && "ACCOUNT FACTORY",
+    !deployment.adapterRegistry && "ADAPTER REGISTRY",
+    !deployment.riskPolicyManager && "RISK POLICY",
+    !deployment.riskSolver && "RISK SOLVER",
+  ].filter(Boolean) as string[];
 
   async function connectWallet() {
     const ethereum = (window as Window & { ethereum?: any }).ethereum;
@@ -150,6 +161,44 @@ export default function App() {
       setMessage(`Wallet connected on ${chain.name}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Wallet connection failed");
+    }
+  }
+
+  async function createMyAccount() {
+    if (!walletClient || !walletAddress) {
+      setMessage("Connect your wallet first.");
+      return;
+    }
+    if (!deployment.accountFactory) {
+      setMessage("3maryjane core is not deployed/configured yet. Add VITE_CL_ACCOUNT_FACTORY in Netlify after deployment.");
+      return;
+    }
+
+    setBusy(true);
+    setTxHash(null);
+    try {
+      const writer = createCLClient({ publicClient, walletClient, deployment });
+      const salt = keccak256(stringToHex(`3maryjane:${chain.id}:${walletAddress.toLowerCase()}`));
+      const predicted = await writer.predictAccount(walletAddress, salt);
+      const code = await publicClient.getCode({ address: predicted });
+
+      if (code && code !== "0x") {
+        setAccountInput(predicted);
+        setMessage("Your deterministic 3maryjane account already exists. Loading it now.");
+        setBusy(false);
+        return;
+      }
+
+      const hash = await writer.createAccount(salt);
+      setTxHash(hash);
+      setMessage("Creating your 3maryjane account…");
+      await publicClient.waitForTransactionReceipt({ hash });
+      setAccountInput(predicted);
+      setMessage("3maryjane account created. Click LOAD to sync portfolio state.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Account creation failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -246,11 +295,35 @@ export default function App() {
                 placeholder="0x…"
                 spellCheck={false}
               />
-              <button className="button" onClick={refresh} disabled={busy}>{busy ? "SYNCING" : "LOAD"}</button>
+              <button className="button" onClick={refresh} disabled={busy || !account}>{busy ? "SYNCING" : "LOAD"}</button>
+            </div>
+            <div className="account-actions">
+              <button className="button secondary" onClick={createMyAccount} disabled={busy || !walletAddress || !deployment.accountFactory}>
+                CREATE MY ACCOUNT
+              </button>
             </div>
             <p>{message}</p>
           </div>
         </section>
+
+        {(!coreConfigured || !riskConfigured || configuredAdapterCount === 0) && (
+          <section className="setup-banner">
+            <div>
+              <div className="panel-title"><span>SETUP</span> DEPLOYMENT NOT CONNECTED</div>
+              <h3>The frontend is live. The 3maryjane contracts are not connected yet.</h3>
+              <p>
+                Wallet connection is working. Portfolio metrics, policy checks, solver output and execution only become live after the
+                3maryjane contracts are deployed and their addresses are added to Netlify.
+              </p>
+            </div>
+            <div className="setup-status">
+              <div><span>CORE</span><strong>{coreConfigured ? "READY" : "MISSING"}</strong></div>
+              <div><span>RISK STACK</span><strong>{riskConfigured ? "READY" : "MISSING"}</strong></div>
+              <div><span>ADAPTERS</span><strong>{configuredAdapterCount}/4</strong></div>
+              <div><span>MISSING</span><strong>{missingConfig.length ? missingConfig.join(" · ") : "NONE"}</strong></div>
+            </div>
+          </section>
+        )}
 
         <section className="metrics-grid">
           <Metric label="EQUITY" value={usd(metrics?.equityUsd)} />
@@ -280,7 +353,7 @@ export default function App() {
 
           <div className="panel">
             <div className="panel-title"><span>02</span> RISK SOLVER</div>
-            <div className="solver-action">{recommendation?.action ?? "STANDBY"}</div>
+            <div className="solver-action">{deployment.riskSolver ? (recommendation?.action ?? "STANDBY") : "OFFLINE"}</div>
             <div className="solver-grid">
               <div><small>ASSET</small><strong>{short(recommendation?.asset)}</strong></div>
               <div><small>CURRENT NET</small><strong>{usd(recommendation?.currentNetUsd)}</strong></div>
@@ -288,7 +361,9 @@ export default function App() {
               <div><small>REPAY</small><strong>{usd(recommendation?.repayDebtUsd)}</strong></div>
             </div>
             <div className="status-line">
-              <span className={risk?.ok ? "status good" : "status danger"}>{risk?.ok ? "POLICY PASS" : "POLICY BREACH"}</span>
+              <span className={risk ? (risk.ok ? "status good" : "status danger") : "status"}>
+                {risk ? (risk.ok ? "POLICY PASS" : "POLICY BREACH") : "POLICY NOT CONFIGURED"}
+              </span>
               <span>margin util {metrics ? ratio(metrics.marginUtilizationE18) : "—"}</span>
             </div>
           </div>
@@ -299,8 +374,20 @@ export default function App() {
             <div className="panel-title"><span>03</span> VENUES + RISK SOURCES</div>
             {protocolCards.map(([name, venue, adapter]) => (
               <div className="venue" key={name}>
-                <div><strong>{name}</strong><small>{venue ? short(venue) : "direct account balances"}</small></div>
-                <div className="venue-right"><span className={adapter ? "light active" : "light"} />{adapter ? short(adapter) : "adapter pending"}</div>
+                <div>
+                  <strong>{name}</strong>
+                  <small>
+                    {name === "EULER" && chain.id !== 143
+                      ? "mainnet-only in the current 3maryjane build"
+                      : venue
+                        ? short(venue)
+                        : "direct account balances"}
+                  </small>
+                </div>
+                <div className="venue-right">
+                  <span className={adapter ? "light active" : "light"} />
+                  {name === "EULER" && chain.id !== 143 ? "not on testnet" : adapter ? short(adapter) : "adapter pending"}
+                </div>
               </div>
             ))}
           </div>
