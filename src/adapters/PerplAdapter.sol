@@ -30,6 +30,9 @@ contract PerplAdapter is BaseAdapter {
     error InvalidAmount();
     error AmountOverflow();
     error InvalidAction();
+    error AccountReadFailed(bytes reason);
+
+    bytes4 internal constant ACCOUNT_DOES_NOT_EXIST_SELECTOR = bytes4(keccak256("AccountDoesNotExist(address)"));
 
     constructor(address exchange_, address collateralToken_, uint256[] memory trackedPerpIds_)
         BaseAdapter(PROTOCOL_ID)
@@ -137,7 +140,19 @@ contract PerplAdapter is BaseAdapter {
         override
         returns (CLTypes.Position[] memory positions)
     {
-        IPerplExchange.AccountInfo memory info = exchange.getAccountByAddr(account);
+        IPerplExchange.AccountInfo memory info;
+        try exchange.getAccountByAddr(account) returns (IPerplExchange.AccountInfo memory accountInfo) {
+            info = accountInfo;
+        } catch (bytes memory reason) {
+            // A CL account that has not yet opened a Perpl exchange account has zero Perpl
+            // positions. Treat only Perpl's explicit AccountDoesNotExist(address) error as empty;
+            // every other read failure still fails closed.
+            if (_revertSelector(reason) == ACCOUNT_DOES_NOT_EXIST_SELECTOR) {
+                return new CLTypes.Position[](0);
+            }
+            revert AccountReadFailed(reason);
+        }
+
         positions = new CLTypes.Position[](_trackedPerpIds.length + 1);
         uint256 count = 0;
 
@@ -214,6 +229,13 @@ contract PerplAdapter is BaseAdapter {
             data: abi.encodeCall(IERC20Minimal.approve, (spender, amount))
         });
         executions[2] = CLTypes.Execution({target: target, value: 0, data: callData});
+    }
+
+    function _revertSelector(bytes memory reason) internal pure returns (bytes4 selector) {
+        if (reason.length < 4) return bytes4(0);
+        assembly {
+            selector := mload(add(reason, 32))
+        }
     }
 
     function _toInt(uint256 value) internal pure returns (int256) {
