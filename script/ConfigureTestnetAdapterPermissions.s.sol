@@ -30,7 +30,9 @@ contract ConfigureTestnetAdapterPermissions {
         address[] memory kuruMarkets = vm.envAddress("KURU_MARKETS", ",");
 
         if (kuruTokens.length == 0) revert EmptyTargetSet("KURU_TRACKED_TOKENS");
-        if (kuruMarkets.length == 0) revert EmptyTargetSet("KURU_MARKETS");
+        // KURU_MARKETS may be empty on testnet when no canonical market has been verified.
+        // Margin deposit/withdraw and token approvals are still configured; orderbook selectors
+        // can be added later once a specific testnet market is independently verified.
 
         vm.startBroadcast(key);
 
