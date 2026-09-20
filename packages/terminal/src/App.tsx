@@ -101,6 +101,7 @@ export default function App() {
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Connect a wallet, then load or create a deployed 3maryjane account.");
+  const [activeProduct, setActiveProduct] = useState<"clearing" | "mary-jane">("clearing");
 
   const account = isAddress(accountInput) ? (getAddress(accountInput) as Address) : null;
   const coreConfigured = Boolean(deployment.accountFactory && deployment.adapterRegistry);
@@ -269,8 +270,20 @@ export default function App() {
           <h1>3maryjane</h1>
         </div>
         <nav className="product-nav" aria-label="Product">
-          <a href="#clearing">CLEARING</a>
-          <a href="#mary-jane">MARY JANE <span>SOON</span></a>
+          <button
+            className={activeProduct === "clearing" ? "active" : ""}
+            onClick={() => setActiveProduct("clearing")}
+            type="button"
+          >
+            CLEARING
+          </button>
+          <button
+            className={activeProduct === "mary-jane" ? "active" : ""}
+            onClick={() => setActiveProduct("mary-jane")}
+            type="button"
+          >
+            MARY JANE <span>SOON</span>
+          </button>
         </nav>
         <div className="top-actions">
           <div className="network-dot"><span />{chain.name} · {chain.id}</div>
@@ -280,7 +293,9 @@ export default function App() {
         </div>
       </header>
 
-      <main id="clearing">
+      <main>
+        {activeProduct === "clearing" ? (
+          <div id="clearing" className="product-page clearing-page">
         <section className="hero-grid">
           <div>
             <p className="kicker">3maryjane / CLEARING ENGINE</p>
@@ -415,8 +430,10 @@ export default function App() {
           </div>
           {txHash && <div className="tx mono">TX {txHash}</div>}
         </section>
-
-        <section className="mary-jane" id="mary-jane">
+          </div>
+        ) : (
+          <div id="mary-jane" className="product-page mary-jane-page">
+        <section className="mary-jane">
           <div className="mary-jane-head">
             <div>
               <div className="panel-title"><span>06</span> MARY JANE</div>
@@ -445,6 +462,8 @@ export default function App() {
             <span>COMING SOON</span>
           </div>
         </section>
+          </div>
+        )}
       </main>
 
       <footer>
