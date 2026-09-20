@@ -36,7 +36,7 @@ function requireComponent(name: "riskPolicyManager" | "riskSolver") {
 
 app.get("/", (c) =>
   c.json({
-    name: "CL Public Risk API",
+    name: "3maryjane Public Risk API",
     version: "v1",
     chainId: deployment.chainId,
     readOnly: true,
