@@ -10,6 +10,7 @@ interface VmTestnetPermissions {
     function envUint(string calldata) external returns (uint256);
     function envAddress(string calldata) external returns (address);
     function envAddress(string calldata, string calldata) external returns (address[] memory);
+    function envOr(string calldata, string calldata, address[] calldata) external returns (address[] memory);
     function startBroadcast(uint256 privateKey) external;
     function stopBroadcast() external;
 }
@@ -27,7 +28,8 @@ contract ConfigureTestnetAdapterPermissions {
         address kuruAdapter = vm.envAddress("KURU_ADAPTER");
         address perplAdapter = vm.envAddress("PERPL_ADAPTER");
         address[] memory kuruTokens = vm.envAddress("KURU_TRACKED_TOKENS", ",");
-        address[] memory kuruMarkets = vm.envAddress("KURU_MARKETS", ",");
+        address[] memory emptyMarkets = new address[](0);
+        address[] memory kuruMarkets = vm.envOr("KURU_MARKETS", ",", emptyMarkets);
 
         if (kuruTokens.length == 0) revert EmptyTargetSet("KURU_TRACKED_TOKENS");
         // KURU_MARKETS may be empty on testnet when no canonical market has been verified.
