@@ -67,7 +67,7 @@ export const perpl = {
   },
   10143: {
     exchange: "0x1964c32f0be608e7d29302aff5e61268e72080cc",
-    collateral: "0xdf5b718d8fcc173335185a2a1513ee8151e3c027",
+    collateral: "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC",
     restUrl: "https://testnet.perpl.xyz/api",
     websocketUrl: "wss://testnet.perpl.xyz",
     perpIds: { BTC: 16, ETH: 32, SOL: 48, MON: 64, ZEC: 256 },
