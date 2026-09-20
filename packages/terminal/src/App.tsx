@@ -108,13 +108,41 @@ export default function App() {
       setMessage("No injected EVM wallet found.");
       return;
     }
+
+    const chainIdHex = `0x${chain.id.toString(16)}`;
+
     try {
-      await ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: `0x${chain.id.toString(16)}` }],
-      });
+      try {
+        await ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: chainIdHex }],
+        });
+      } catch (switchError) {
+        const code = Number((switchError as { code?: number }).code ?? 0);
+        const message = switchError instanceof Error ? switchError.message.toLowerCase() : "";
+        const missingChain = code === 4902 || message.includes("unrecognized chain") || message.includes("unknown chain");
+
+        if (!missingChain) throw switchError;
+
+        await ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: chainIdHex,
+            chainName: chain.name,
+            nativeCurrency: chain.nativeCurrency,
+            rpcUrls: [rpcUrl ?? chain.rpcUrls.default.http[0]],
+          }],
+        });
+
+        await ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: chainIdHex }],
+        });
+      }
+
       const accounts = (await ethereum.request({ method: "eth_requestAccounts" })) as string[];
       if (!accounts[0] || !isAddress(accounts[0])) throw new Error("Wallet returned no account");
+
       const address = getAddress(accounts[0]) as Address;
       const wallet = createWalletClient({ account: address, chain, transport: custom(ethereum) });
       setWalletAddress(address);
