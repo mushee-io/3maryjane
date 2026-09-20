@@ -29,6 +29,7 @@ export const clAccountFactoryAbi = parseAbi([
 ]);
 
 export const riskPolicyManagerAbi = parseAbi([
+  "error AdapterReadFailed(address adapter)",
   "function policy(address account) view returns ((bool enabled,bool allowRiskReducingWhenBreached,uint256 maxGrossExposureUsd,uint256 maxDebtUsd,uint256 maxLeverageE18,uint256 maxMarginUtilizationE18,uint256 minHealthE18,uint16 minCriticalMoveBps))",
   "function adapters(address account) view returns (address[])",
   "function limitedAssets(address account) view returns (address[])",
@@ -40,6 +41,7 @@ export const riskPolicyManagerAbi = parseAbi([
 ]);
 
 export const riskSolverAbi = parseAbi([
+  "error AdapterReadFailed(address adapter)",
   "function solve(address account) view returns ((uint8 action,bytes32 reason,address asset,int256 currentNetUsd,int256 targetNetUsd,uint256 reduceGrossUsd,uint256 repayDebtUsd,uint256 severityBps) recommendation,(uint256 assetsUsd,uint256 debtUsd,int256 equityUsd,int256 pnlUsd,uint256 grossExposureUsd,uint256 directionalExposureUsd,uint256 initialMarginUsd,uint256 maintenanceMarginUsd,uint256 leverageE18,uint256 healthE18,uint256 marginUtilizationE18,uint256 criticalMoveBps) metrics,(address asset,int256 netUsd,uint256 grossUsd,uint256 hedgedPairUsd,uint256 initialMarginUsd,uint256 maintenanceMarginUsd)[] exposures)",
 ]);
 
