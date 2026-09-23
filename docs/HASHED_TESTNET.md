@@ -109,6 +109,27 @@ encodeHashed.repay(hUSD, amount)
 
 It also exposes `depositToken(account, asset, amount)` so a wallet can fund its 3maryjane account before adapter execution.
 
+
+## End-to-end smoke proof — confirmed
+
+The live Monad testnet clearing smoke script completed successfully on 2026-09-23 and restored the Hashed position to its pre-run state after the round trip.
+
+Confirmed transactions from the final sequence:
+
+- adapter execution: `0xe0549f97f08b0bef61f509e50a9a2434b1ebef853805fb5b985c1d6d6092bcb4`
+- adapter execution: `0x005fe1897c18f4b29f91d40b24c27c5d455d2934469258f24bfbb4dafc051349`
+- adapter execution: `0x598286bf9d59dce3553f64cf22c6abd99d8c15ca7b5df923db921f022667eb00`
+- account withdrawal: `0x2445c82b837171eb87ba7e861ffc4dc09237cf27fa73f84929eca04ae4b11474`
+
+The Foundry run reported:
+
+```text
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+Total paid: 0.467546973004539291 MON
+```
+
+Because `DemoHashedClearingTestnet.s.sol` asserts the final wallet/account collateral balances, Hashed locked collateral, debt, and unified policy state are restored, a successful completion is also evidence that the full open → borrow → repay → unlock → return path completed without leaving residual Hashed state.
+
 ## Production warning
 
 hNVDA and hAAPL are synthetic testnet demo tokens. The current price sources are manual testnet sources. hUSD is a testnet credit unit. None of them should be represented as real shares, a production stablecoin, or production oracle infrastructure.
