@@ -625,3 +625,185 @@ footer { display: flex; justify-content: space-between; padding: 26px 28px; font
   .hashed-action-buttons { grid-template-columns: 1fr; }
   .hashed-console-status { align-items: flex-start; flex-direction: column; }
 }
+
+
+/* Hashed unified clearing-account demo */
+.hashed-clearing-demo {
+  padding: 38px 0 42px;
+  border-bottom: 1px solid #2b2b2b;
+}
+.hashed-clearing-head {
+  display: grid;
+  grid-template-columns: 1.2fr .8fr;
+  gap: 34px;
+  align-items: end;
+  margin-bottom: 26px;
+}
+.hashed-clearing-head .panel-title { margin-bottom: 12px; }
+.hashed-clearing-head h3 {
+  margin: 0;
+  max-width: 900px;
+  font-size: clamp(32px, 4.8vw, 72px);
+  line-height: .92;
+  letter-spacing: -.06em;
+  font-weight: 620;
+}
+.hashed-clearing-head p {
+  max-width: 760px;
+  margin: 18px 0 0;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.hashed-clearing-account {
+  padding: 18px;
+  border: 1px solid #303030;
+  background: #080808;
+}
+.hashed-clearing-account label {
+  display: block;
+  color: #727272;
+  font-size: 8px;
+  letter-spacing: .14em;
+  font-weight: 800;
+}
+.hashed-clearing-account small {
+  display: block;
+  margin-top: 10px;
+  color: #626262;
+  font-size: 8px;
+  letter-spacing: .08em;
+}
+.hashed-clearing-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  border-top: 1px solid #2a2a2a;
+  border-bottom: 1px solid #2a2a2a;
+}
+.hashed-clearing-metrics > div {
+  min-width: 0;
+  padding: 19px 14px 19px 0;
+  border-right: 1px solid #252525;
+}
+.hashed-clearing-metrics > div:not(:first-child) { padding-left: 14px; }
+.hashed-clearing-metrics > div:last-child { border-right: 0; }
+.hashed-clearing-metrics small {
+  display: block;
+  margin-bottom: 8px;
+  color: #626262;
+  font-size: 7px;
+  letter-spacing: .1em;
+}
+.hashed-clearing-metrics strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: clamp(14px, 1.6vw, 22px);
+  letter-spacing: -.03em;
+}
+.hashed-clearing-grid {
+  display: grid;
+  grid-template-columns: .9fr 1.1fr;
+  gap: 1px;
+  margin-top: 1px;
+  background: #282828;
+  border: 1px solid #282828;
+}
+.hashed-clearing-actions,
+.hashed-clearing-risk {
+  min-width: 0;
+  padding: 22px;
+  background: #080808;
+}
+.hashed-account-balances {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: #252525;
+  border: 1px solid #252525;
+}
+.hashed-account-balances > div {
+  padding: 14px;
+  background: #0b0b0b;
+}
+.hashed-account-balances span {
+  display: block;
+  color: #626262;
+  font-size: 7px;
+  letter-spacing: .1em;
+}
+.hashed-account-balances strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+}
+.hashed-clearing-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+}
+.hashed-clearing-help {
+  margin: 16px 0 0;
+  color: #626262;
+  font-size: 9px;
+  line-height: 1.6;
+}
+.hashed-covered-line {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 12px 0;
+  border-top: 1px solid #242424;
+  border-bottom: 1px solid #242424;
+}
+.hashed-covered-line span {
+  color: #626262;
+  font-size: 7px;
+  letter-spacing: .1em;
+}
+.hashed-covered-line strong {
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+.hashed-exposure-table { width: 100%; }
+.hashed-exposure-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid #222;
+  font-size: 10px;
+}
+.hashed-exposure-row.head {
+  border-top: 0;
+  color: #626262;
+  font-size: 7px;
+  letter-spacing: .09em;
+}
+.hashed-exposure-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+@media (max-width: 1100px) {
+  .hashed-clearing-metrics { grid-template-columns: repeat(3, 1fr); }
+  .hashed-clearing-metrics > div:nth-child(3) { border-right: 0; }
+}
+@media (max-width: 900px) {
+  .hashed-clearing-head,
+  .hashed-clearing-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 650px) {
+  .hashed-clearing-metrics { grid-template-columns: repeat(2, 1fr); }
+  .hashed-clearing-metrics > div:nth-child(2n) { border-right: 0; }
+  .hashed-clearing-buttons { grid-template-columns: 1fr; }
+  .hashed-covered-line { grid-template-columns: 1fr auto; }
+  .hashed-account-balances { grid-template-columns: 1fr; }
+  .hashed-exposure-row { grid-template-columns: 1fr 1fr 1fr; }
+  .hashed-exposure-row span:nth-child(4),
+  .hashed-exposure-row strong:nth-child(4) { display: none; }
+}
