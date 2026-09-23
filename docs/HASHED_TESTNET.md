@@ -1,66 +1,116 @@
-# Hashed — Monad Testnet MVP
+# Hashed — Monad Testnet
 
-Hashed is the stock-backed credit module inside **3maryjane**.
+Hashed is the equity-backed credit module inside **3maryjane**. The contracts are deployed on Monad testnet and the Hashed adapter is registered in the live 3maryjane demo account.
 
-## Thesis
+## What it proves
 
-3maryjane already normalizes cross-protocol exposure and risk. Hashed turns that risk layer into a credit primitive:
+1. claim synthetic demo equity on Monad testnet,
+2. fund a user-owned 3maryjane account,
+3. execute Hashed through the registered adapter,
+4. lock hNVDA or hAAPL and borrow hUSD,
+5. expose both collateral and debt to the same 3maryjane risk policy that already reads Perpl and free collateral,
+6. reject unsafe post-trade states atomically,
+7. repay and unlock through the same account.
 
-1. deposit tokenized-equity collateral,
-2. borrow hUSD against the collateral,
-3. expose both collateral and debt back to 3maryjane through `HashedAdapter`,
-4. let the existing clearing/risk stack see the complete position,
-5. liquidate when the collateral-backed health factor falls below 1.0.
+This is an equity-backed credit wedge, not a claim that independent protocols share native collateral.
 
-This is intentionally not a generic money market. The first wedge is **equity-backed credit on Monad**.
+## Live deployment
+
+Network: **Monad testnet · chain 10143**
+
+| Component | Address |
+| --- | --- |
+| Demo 3maryjane account | `0x38Ac1B6b3ec3eD28E0b49C5331b01151D1C3577f` |
+| HashedCreditVault | `0x63814b52f6c2d366598dc7ed47eb364b41cf9a15` |
+| HashedAdapter | `0xF43bc85317345Ce54Fa616440b9b76AF276866eb` |
+| hUSD | `0xdcc5b92d7e99f4f31527121a402516f69d3edc27` |
+| hNVDA | `0x2ac57e9246e11cbf9899d276f2571d2b4cdfffac` |
+| hAAPL | `0x4edd0c5532cdc7c88c91eecbdf355b62ef309cb9` |
+| AdapterRegistry | `0x2e48c231588fcf6b8100a22d3a5b279b20098695` |
+| RiskRegistry | `0xdd6a9a09961b65dff5b91c550800d3791d199f3d` |
+| RiskEngine | `0x4ec4b8062c0eab4dfef9ede4a335e4e165e8ef50` |
+| RiskPolicyManager | `0xebf69ede951ff508c0a0cfcbb75c90db186fd834` |
+
+Explorer base: `https://testnet.monadvision.com`
+
+Known integration evidence:
+
+- asset permission transaction: `0xe061f93e49d4081fb84ec8a681b0fba9d476f6c672bec9f38f08ffce6da7364d`
+- adapter authorization transaction: `0xe5464bd0292af4c7b111c1acf8cf7e79862041daab90886f0114465b51ed25ea`
+- risk-policy configuration transaction: `0x8ca600fdd3b6d69e7296302a3a28ec693ddcef2d13f934cf59673c2e49a5ef23`
+
+Onchain read-back after configuration:
+
+```text
+AdapterRegistry.isAdapterActive(HashedAdapter) = true
+CLAccount.authorizedAdapter(HashedAdapter) = true
+RiskPolicyManager.adapters(CLAccount) =
+[
+  0x49062a35132c0982b54B0C3FA03bdaC0bB650489, // Perpl
+  0x76D9fd10b396faCA0FBAF0c39E0804BB39803F03, // free collateral
+  0xF43bc85317345Ce54Fa616440b9b76AF276866eb  // Hashed
+]
+```
 
 ## Contracts
 
-- `src/hashed/HashedUSD.sol` — testnet credit unit (6 decimals).
+- `src/hashed/HashedUSD.sol` — 6-decimal testnet credit unit.
 - `src/hashed/HashedCreditVault.sol` — collateral, LTV, health, repayment and liquidation.
-- `src/adapters/HashedAdapter.sol` — normalizes Hashed collateral + debt into 3maryjane positions.
+- `src/adapters/HashedAdapter.sol` — converts Hashed collateral + debt into normalized 3maryjane positions.
 - `src/hashed/TestnetEquityToken.sol` — synthetic equity faucet token for demo/testnet use only.
-- `script/DeployHashedTestnet.s.sol` — Monad testnet deployment script.
+- `script/DeployHashedTestnet.s.sol` — deploys the Hashed market.
+- `script/ConfigureHashedTestnet.s.sol` — registers exact targets/selectors and adds Hashed to the demo account risk policy.
 
-## Initial testnet market
+## Testnet market parameters
 
-The deploy script creates demo hNVDA and hAAPL collateral assets with manual testnet prices. These are synthetic demo assets and must never be described as real shares or production tokenized equities.
+| Asset | Manual demo price | LTV | Liquidation threshold | Liquidation bonus |
+| --- | ---: | ---: | ---: | ---: |
+| hNVDA | $100 | 60% | 75% | 5% |
+| hAAPL | $200 | 65% | 78% | 5% |
+| hUSD | $1 | — | — | — |
 
-Initial risk parameters:
+## Terminal demo modes
 
-| Asset | LTV | Liquidation threshold | Liquidation bonus |
-| --- | ---: | ---: | ---: |
-| hNVDA | 60% | 75% | 5% |
-| hAAPL | 65% | 78% | 5% |
+### Quick vault demo
 
-## Deploy
+This is the shortest product interaction:
 
-Use the existing Monad testnet RPC and the deployed 3maryjane RiskRegistry:
-
-```bash
-export MONAD_TESTNET_RPC="https://testnet-rpc.monad.xyz"
-export RISK_REGISTRY="0xdd6a9a09961b65dff5b91c550800d3791d199f3d"
-read -s -p "Testnet private key: " PRIVATE_KEY
-echo
-export PRIVATE_KEY
-
-forge script script/DeployHashedTestnet.s.sol:DeployHashedTestnet \
-  --rpc-url "$MONAD_TESTNET_RPC" \
-  --broadcast
+```text
+Connect → Claim hNVDA/hAAPL → Deposit → Borrow hUSD → Repay → Withdraw
 ```
 
-Do not commit or paste `PRIVATE_KEY`.
+### Unified clearing demo
 
-## After deployment
+This is the important architecture proof:
 
-The next integration step is to register the Hashed adapter with 3maryjane's AdapterRegistry and authorize the exact token/vault selectors on the configured demo CL account. Then add the deployment addresses to the terminal environment:
+```text
+Claim demo equity
+  → fund the 3maryjane account
+  → LOCK VIA ADAPTER
+  → BORROW VIA ADAPTER
+  → inspect unified risk
+  → REPAY VIA ADAPTER
+  → UNLOCK VIA ADAPTER
+  → return asset to owner wallet
+```
 
-- `VITE_HASHED_VAULT`
-- `VITE_HASHED_ADAPTER`
-- `VITE_HASHED_USD`
-- `VITE_HASHED_NVDA`
-- `VITE_HASHED_AAPL`
+The unified panel reads portfolio equity, total debt, gross exposure, portfolio health, solver output, policy state and per-asset exposure buckets from the existing clearing stack.
+
+## SDK
+
+The SDK exports `encodeHashed` for exact adapter calldata:
+
+```ts
+encodeHashed.deposit(hNVDA, amount)
+encodeHashed.withdraw(hNVDA, amount)
+encodeHashed.borrow(hUSD, amount)
+encodeHashed.repay(hUSD, amount)
+```
+
+It also exposes `depositToken(account, asset, amount)` so a wallet can fund its 3maryjane account before adapter execution.
 
 ## Production warning
 
-The testnet manual price sources and synthetic equity tokens are demo infrastructure. Mainnet requires verified tokenized-equity contracts, production-grade oracle feeds, conservative market parameters, and an external security review.
+hNVDA and hAAPL are synthetic testnet demo tokens. The current price sources are manual testnet sources. hUSD is a testnet credit unit. None of them should be represented as real shares, a production stablecoin, or production oracle infrastructure.
+
+A production rollout requires verified tokenized-equity/RWA contracts, production-grade oracle feeds, legal/compliance review for the underlying assets and jurisdictions, conservative market parameters, monitoring and an independent security audit.
