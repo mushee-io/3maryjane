@@ -6,24 +6,11 @@
 
 The Solidity and SDK code keeps the internal `CL*` contract/type names for stability, but the product and user-facing brand is **3maryjane**.
 
-## Mary Jane — coming soon
-
-**Mary Jane** is the upcoming AI bot trading arena inside 3maryjane.
-
-Traders will be able to deploy or select autonomous trading bots, define portfolio and risk boundaries, and put strategies head-to-head across Monad markets. The module is intentionally displayed as **Coming Soon** until live trading is implemented and verified.
-
-Planned Mary Jane mechanics:
-
-- AI bot vs bot strategy competition
-- explicit risk-bounded execution
-- verifiable onchain market/performance data
-- platform fees planned to fund MON market buybacks and burns
-
 ## Current state
 
-The code-side build covers Milestones 1–29 plus the complete M30 deployment/demo toolchain. The final live-funded M30 checkbox remains external: contracts must still be broadcast from an authorized funded signer and the real Monad transaction hashes recorded.
+3maryjane has a live Monad testnet deployment for the core clearing/risk stack plus **Hashed**, the equity-backed credit module. The configured demo account currently covers Perpl, direct free collateral and Hashed under one risk policy. Kuru remains in the codebase but its stale testnet target is disabled; Euler is retained as a verified mainnet integration rather than claimed as a live testnet venue.
 
-Implemented today:
+Implemented:
 
 - deterministic user-owned clearing accounts
 - asset custody and policy-aware withdrawals
@@ -33,6 +20,8 @@ Implemented today:
 - Kuru margin + CLOB adapter
 - Perpl direct-onchain perp adapter
 - Euler v2 lending adapter
+- **Hashed stock-backed credit adapter + vault**
+- **hNVDA / hAAPL synthetic testnet collateral + hUSD credit**
 - protocol-neutral position schema
 - unified portfolio ledger read path
 - canonical asset/instrument risk registry
@@ -56,12 +45,48 @@ Implemented today:
 - read-only Public Risk API
 - protocol onboarding manifest framework
 - 3maryjane Terminal
-- explicit tracked-token/perp/vault deployment configuration
-- exact Kuru/Perpl/Euler permission-configuration script
+- live Hashed wallet demo and **unified clearing-account execution demo**
+- exact target/selector permission scripts
 - threat model, deployment checklist and Metropolis demo runbook
-- deployment evidence format for real addresses and transaction hashes
 
-See `docs/MILESTONES.md`, `docs/RISK_ENGINE.md`, `docs/INTENT_AUTOMATION.md`, `docs/PROTOCOL_ONBOARDING.md`, `docs/THREAT_MODEL.md`, `docs/DEPLOYMENT_CHECKLIST.md`, and `docs/METROPOLIS_DEMO.md`.
+See `docs/MILESTONES.md`, `docs/RISK_ENGINE.md`, `docs/INTENT_AUTOMATION.md`, `docs/PROTOCOL_ONBOARDING.md`, `docs/THREAT_MODEL.md`, `docs/DEPLOYMENT_CHECKLIST.md`, `docs/HASHED_TESTNET.md`, and `docs/METROPOLIS_SUBMISSION.md`.
+
+## Live Hashed deployment — Monad testnet 10143
+
+| Component | Address |
+| --- | --- |
+| Demo 3maryjane account | `0x38Ac1B6b3ec3eD28E0b49C5331b01151D1C3577f` |
+| HashedCreditVault | `0x63814b52f6c2d366598dc7ed47eb364b41cf9a15` |
+| HashedAdapter | `0xF43bc85317345Ce54Fa616440b9b76AF276866eb` |
+| hUSD | `0xdcc5b92d7e99f4f31527121a402516f69d3edc27` |
+| hNVDA | `0x2ac57e9246e11cbf9899d276f2571d2b4cdfffac` |
+| hAAPL | `0x4edd0c5532cdc7c88c91eecbdf355b62ef309cb9` |
+| RiskPolicyManager | `0xebf69ede951ff508c0a0cfcbb75c90db186fd834` |
+| RiskEngine | `0x4ec4b8062c0eab4dfef9ede4a335e4e165e8ef50` |
+
+The Hashed adapter is active, authorized by the demo account, and included in the account's risk-policy adapter set alongside Perpl and free collateral.
+
+### Architecture
+
+```mermaid
+flowchart LR
+    W[Owner wallet] --> A[3maryjane Account]
+    A -->|execute| P[Perpl Adapter]
+    A -->|execute| H[Hashed Adapter]
+    A -->|balance read| F[Free Collateral Adapter]
+    H --> V[Hashed Credit Vault]
+    V --> E[hNVDA / hAAPL collateral]
+    V --> U[hUSD debt]
+    P --> PE[Perpl positions]
+    P --> R[Risk Engine]
+    H --> R
+    F --> R
+    R --> PM[Risk Policy Manager]
+    PM -->|post-state pass / revert| A
+    R --> S[Risk Solver]
+```
+
+Independent venues keep their own native collateral, margin and liquidation rules. 3maryjane normalizes their positions into a single owner-defined risk surface; it does **not** make independent protocols share collateral.
 
 ## Security model
 
@@ -104,4 +129,4 @@ CI covers Solidity compilation, deployable bytecode sizes, the Forge suite, Type
 
 The fail-closed production sequence is documented in `docs/DEPLOYMENT_CHECKLIST.md`.
 
-The repository should not be described as a completed live deployment until the final funded transactions are confirmed on the intended Monad network.
+The Hashed + core demo stack is deployed on Monad testnet. Mainnet and any venue-specific integration should only be described as live after its own funded transactions are confirmed and recorded.
