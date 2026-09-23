@@ -7,6 +7,7 @@ import {RiskTypes} from "../src/types/RiskTypes.sol";
 import {HashedUSD} from "../src/hashed/HashedUSD.sol";
 import {HashedCreditVault} from "../src/hashed/HashedCreditVault.sol";
 import {HashedAdapter} from "../src/adapters/HashedAdapter.sol";
+import {CLTypes} from "../src/types/CLTypes.sol";
 import {MockPriceSource} from "./mocks/MockPriceSource.sol";
 
 contract MockEquity18 {
