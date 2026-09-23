@@ -35,3 +35,10 @@ export const EulerAction = {
   BORROW: 6,
   REPAY: 7,
 } as const;
+
+export const HashedAction = {
+  DEPOSIT: 0,
+  WITHDRAW: 1,
+  BORROW: 2,
+  REPAY: 3,
+} as const;
