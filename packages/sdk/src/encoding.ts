@@ -1,5 +1,5 @@
 import { encodeAbiParameters, parseAbiParameters } from "viem";
-import { EulerAction, KuruAction, PerplAction } from "./actions";
+import { EulerAction, HashedAction, KuruAction, PerplAction } from "./actions";
 import type { Address, Hex } from "./types";
 
 const actionEnvelope = parseAbiParameters("uint8 kind, bytes payload");
@@ -10,6 +10,7 @@ const cancelOrders = parseAbiParameters("address market, uint40[] orderIds");
 const singleAddress = parseAbiParameters("address value");
 const singleUint = parseAbiParameters("uint256 value");
 const singleBool = parseAbiParameters("bool value");
+const hashedAction = parseAbiParameters("uint8 actionType, address asset, uint256 amount");
 
 const perplOrderParams = parseAbiParameters(
   "(uint256 orderDescId,uint256 perpId,uint8 orderType,uint256 orderId,uint256 pricePNS,uint256 lotLNS,uint256 expiryBlock,bool postOnly,bool fillOrKill,bool immediateOrCancel,uint256 maxMatches,uint256 leverageHdths,uint256 lastExecutionBlock,uint256 amountCNS,uint256 maxNegPnlCollatBPS) order",
@@ -107,6 +108,21 @@ export const encodeEuler = {
   },
   repay(vault: Address, amount: bigint): Hex {
     return envelope(EulerAction.REPAY, encodeAbiParameters(addressAmount, [vault, amount]));
+  },
+};
+
+export const encodeHashed = {
+  deposit(asset: Address, amount: bigint): Hex {
+    return encodeAbiParameters(hashedAction, [HashedAction.DEPOSIT, asset, amount]);
+  },
+  withdraw(asset: Address, amount: bigint): Hex {
+    return encodeAbiParameters(hashedAction, [HashedAction.WITHDRAW, asset, amount]);
+  },
+  borrow(debtToken: Address, amount: bigint): Hex {
+    return encodeAbiParameters(hashedAction, [HashedAction.BORROW, debtToken, amount]);
+  },
+  repay(debtToken: Address, amount: bigint): Hex {
+    return encodeAbiParameters(hashedAction, [HashedAction.REPAY, debtToken, amount]);
   },
 };
 
