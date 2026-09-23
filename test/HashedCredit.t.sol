@@ -118,7 +118,7 @@ contract HashedCreditTest is TestBase {
         vm.startPrank(ALICE);
         stock.approve(address(vault), 10e18);
         vault.deposit(address(stock), 10e18);
-        vm.expectRevert(HashedCreditVault.BorrowLimitExceeded.selector);
+        vm.expectRevert(abi.encodeWithSelector(HashedCreditVault.BorrowLimitExceeded.selector, 1_201e18, 1_200e18));
         vault.borrow(1_201e6);
         vm.stopPrank();
     }
