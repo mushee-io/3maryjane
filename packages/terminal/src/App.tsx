@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createPublicClient,
   createWalletClient,
@@ -8,6 +8,8 @@ import {
   http,
   isAddress,
   keccak256,
+  parseAbi,
+  parseUnits,
   stringToHex,
   type WalletClient,
 } from "viem";
@@ -37,6 +39,48 @@ const hashedDeployment = {
   hUSD: envAddress("VITE_HASHED_USD") ?? (chain.id === 10143 ? "0xdcc5b92d7e99f4f31527121a402516f69d3edc27" as Address : undefined),
   hNVDA: envAddress("VITE_HASHED_NVDA") ?? (chain.id === 10143 ? "0x2ac57e9246e11cbf9899d276f2571d2b4cdfffac" as Address : undefined),
   hAAPL: envAddress("VITE_HASHED_AAPL") ?? (chain.id === 10143 ? "0x4edd0c5532cdc7c88c91eecbdf355b62ef309cb9" as Address : undefined),
+};
+
+const equityTokenAbi = parseAbi([
+  "function balanceOf(address account) view returns (uint256)",
+  "function faucetClaimed(address account) view returns (bool)",
+  "function faucet()",
+  "function approve(address spender, uint256 amount) returns (bool)",
+]);
+
+const hashedUsdAbi = parseAbi([
+  "function balanceOf(address account) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+]);
+
+const hashedVaultAbi = parseAbi([
+  "function collateralOf(address account, address asset) view returns (uint256)",
+  "function debtOf(address account) view returns (uint256)",
+  "function totalCollateralUsdE18(address account) view returns (uint256)",
+  "function borrowCapacityUsdE18(address account) view returns (uint256)",
+  "function liquidationCapacityUsdE18(address account) view returns (uint256)",
+  "function debtUsdE18(address account) view returns (uint256)",
+  "function healthFactorE18(address account) view returns (uint256)",
+  "function deposit(address asset, uint256 amount)",
+  "function withdraw(address asset, uint256 amount)",
+  "function borrow(uint256 amount)",
+  "function repay(uint256 amount) returns (uint256)",
+]);
+
+type HashedReadState = {
+  walletNvda: bigint;
+  walletAapl: bigint;
+  walletHusd: bigint;
+  lockedNvda: bigint;
+  lockedAapl: bigint;
+  debtRaw: bigint;
+  collateralUsdE18: bigint;
+  borrowCapacityUsdE18: bigint;
+  liquidationCapacityUsdE18: bigint;
+  debtUsdE18: bigint;
+  healthFactorE18: bigint;
+  nvdaClaimed: boolean;
+  aaplClaimed: boolean;
 };
 
 function envAddress(key: string): Address | undefined {
@@ -95,6 +139,13 @@ function short(address: string | undefined): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
+function tokenAmount(value: bigint | undefined, decimals: number, maximumFractionDigits = 4): string {
+  if (value === undefined) return "—";
+  const number = Number(formatUnits(value, decimals));
+  if (!Number.isFinite(number)) return formatUnits(value, decimals);
+  return number.toLocaleString(undefined, { maximumFractionDigits });
+}
+
 export default function App() {
   const reader = useMemo(() => createCLClient({ publicClient, deployment }), []);
   const [walletClient, setWalletClient] = useState<WalletClient | null>(null);
@@ -109,7 +160,7 @@ export default function App() {
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Connect a wallet, then load or create a deployed 3maryjane account.");
-  const [activeProduct, setActiveProduct] = useState<"clearing" | "mary-jane" | "hashed">("clearing");
+  const [activeProduct, setActiveProduct] = useState<"clearing" | "hashed">("clearing");
 
   const account = isAddress(accountInput) ? (getAddress(accountInput) as Address) : null;
   const coreConfigured = Boolean(deployment.accountFactory && deployment.adapterRegistry);
@@ -286,13 +337,6 @@ export default function App() {
             CLEARING
           </button>
           <button
-            className={activeProduct === "mary-jane" ? "active" : ""}
-            onClick={() => setActiveProduct("mary-jane")}
-            type="button"
-          >
-            MARY JANE <span>SOON</span>
-          </button>
-          <button
             className={activeProduct === "hashed" ? "active" : ""}
             onClick={() => setActiveProduct("hashed")}
             type="button"
@@ -446,40 +490,12 @@ export default function App() {
           {txHash && <div className="tx mono">TX {txHash}</div>}
         </section>
           </div>
-        ) : activeProduct === "mary-jane" ? (
-          <div id="mary-jane" className="product-page mary-jane-page">
-        <section className="mary-jane">
-          <div className="mary-jane-head">
-            <div>
-              <div className="panel-title"><span>06</span> MARY JANE</div>
-              <p className="coming-pill">COMING SOON</p>
-            </div>
-            <div className="mary-jane-number">MJ</div>
-          </div>
-          <div className="mary-jane-grid">
-            <div className="mary-jane-copy">
-              <p className="kicker">AI BOT TRADING ARENA</p>
-              <h3>Strategies enter.<br />Bots compete.<br /><span>Only performance survives.</span></h3>
-              <p className="mary-jane-description">
-                Mary Jane is the upcoming autonomous trading engine inside 3maryjane. Traders will be able to deploy or select AI trading bots, define risk boundaries, and put strategies head-to-head across Monad markets.
-              </p>
-            </div>
-            <div className="mary-jane-spec">
-              <div><span>01</span><strong>BOT VS BOT</strong><small>Autonomous strategies compete against each other.</small></div>
-              <div><span>02</span><strong>RISK-BOUND EXECUTION</strong><small>Each bot operates inside explicit portfolio limits.</small></div>
-              <div><span>03</span><strong>VERIFIABLE PERFORMANCE</strong><small>Execution and results settle against onchain market state.</small></div>
-              <div><span>04</span><strong>MON BUYBACK + BURN</strong><small>Platform fees are planned to fund MON market buybacks and burns.</small></div>
-            </div>
-          </div>
-          <div className="mary-jane-footer">
-            <span>MARY JANE ENGINE</span>
-            <span>AI TRADING · COMPETITIVE STRATEGIES · MONAD</span>
-            <span>COMING SOON</span>
-          </div>
-        </section>
-          </div>
         ) : (
-          <HashedPage />
+          <HashedPage
+            walletClient={walletClient}
+            walletAddress={walletAddress}
+            connectWallet={connectWallet}
+          />
         )}
       </main>
 
@@ -491,7 +507,15 @@ export default function App() {
   );
 }
 
-function HashedPage() {
+function HashedPage({
+  walletClient,
+  walletAddress,
+  connectWallet,
+}: {
+  walletClient: WalletClient | null;
+  walletAddress: Address | null;
+  connectWallet: () => Promise<void>;
+}) {
   const connected = Boolean(
     hashedDeployment.vault &&
     hashedDeployment.adapter &&
@@ -499,6 +523,15 @@ function HashedPage() {
     hashedDeployment.hNVDA &&
     hashedDeployment.hAAPL
   );
+  const [state, setState] = useState<HashedReadState | null>(null);
+  const [selectedCollateral, setSelectedCollateral] = useState<"hNVDA" | "hAAPL">("hNVDA");
+  const [collateralAmount, setCollateralAmount] = useState("1");
+  const [creditAmount, setCreditAmount] = useState("100");
+  const [hashedBusy, setHashedBusy] = useState(false);
+  const [hashedMessage, setHashedMessage] = useState(
+    "Connect a wallet to claim demo equity and open a live Hashed testnet position."
+  );
+  const [hashedTx, setHashedTx] = useState<Hex | null>(null);
 
   const deploymentRows = [
     ["CREDIT VAULT", hashedDeployment.vault],
@@ -507,6 +540,285 @@ function HashedPage() {
     ["DEMO hNVDA", hashedDeployment.hNVDA],
     ["DEMO hAAPL", hashedDeployment.hAAPL],
   ] as const;
+
+  function requireHashedDeployment() {
+    const vault = hashedDeployment.vault;
+    const hUSD = hashedDeployment.hUSD;
+    const hNVDA = hashedDeployment.hNVDA;
+    const hAAPL = hashedDeployment.hAAPL;
+    if (!vault || !hUSD || !hNVDA || !hAAPL) {
+      throw new Error("Hashed is not configured for this network.");
+    }
+    return { vault, hUSD, hNVDA, hAAPL };
+  }
+
+  function parsePositive(value: string, decimals: number): bigint {
+    const clean = value.trim();
+    if (!clean) throw new Error("Enter an amount.");
+    const parsed = parseUnits(clean, decimals);
+    if (parsed <= 0n) throw new Error("Amount must be greater than zero.");
+    return parsed;
+  }
+
+  async function waitFor(hash: Hex) {
+    setHashedTx(hash);
+    await publicClient.waitForTransactionReceipt({ hash });
+  }
+
+  async function refreshHashed() {
+    if (!walletAddress) {
+      setState(null);
+      return;
+    }
+
+    try {
+      const d = requireHashedDeployment();
+      const [
+        walletNvda,
+        walletAapl,
+        walletHusd,
+        lockedNvda,
+        lockedAapl,
+        debtRaw,
+        collateralUsdE18,
+        borrowCapacityUsdE18,
+        liquidationCapacityUsdE18,
+        debtUsdE18,
+        healthFactorE18,
+        nvdaClaimed,
+        aaplClaimed,
+      ] = await Promise.all([
+        publicClient.readContract({ address: d.hNVDA, abi: equityTokenAbi, functionName: "balanceOf", args: [walletAddress] }),
+        publicClient.readContract({ address: d.hAAPL, abi: equityTokenAbi, functionName: "balanceOf", args: [walletAddress] }),
+        publicClient.readContract({ address: d.hUSD, abi: hashedUsdAbi, functionName: "balanceOf", args: [walletAddress] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "collateralOf", args: [walletAddress, d.hNVDA] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "collateralOf", args: [walletAddress, d.hAAPL] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "debtOf", args: [walletAddress] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "totalCollateralUsdE18", args: [walletAddress] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "borrowCapacityUsdE18", args: [walletAddress] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "liquidationCapacityUsdE18", args: [walletAddress] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "debtUsdE18", args: [walletAddress] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "healthFactorE18", args: [walletAddress] }),
+        publicClient.readContract({ address: d.hNVDA, abi: equityTokenAbi, functionName: "faucetClaimed", args: [walletAddress] }),
+        publicClient.readContract({ address: d.hAAPL, abi: equityTokenAbi, functionName: "faucetClaimed", args: [walletAddress] }),
+      ]);
+
+      setState({
+        walletNvda,
+        walletAapl,
+        walletHusd,
+        lockedNvda,
+        lockedAapl,
+        debtRaw,
+        collateralUsdE18,
+        borrowCapacityUsdE18,
+        liquidationCapacityUsdE18,
+        debtUsdE18,
+        healthFactorE18,
+        nvdaClaimed,
+        aaplClaimed,
+      });
+      setHashedMessage("Live Hashed position synced from Monad testnet.");
+    } catch (error) {
+      setHashedMessage(error instanceof Error ? error.message : "Failed to read Hashed state.");
+    }
+  }
+
+  useEffect(() => {
+    if (walletAddress && connected) void refreshHashed();
+  }, [walletAddress, connected]);
+
+  async function claimDemo(asset: "hNVDA" | "hAAPL") {
+    if (!walletClient || !walletAddress) {
+      await connectWallet();
+      return;
+    }
+
+    setHashedBusy(true);
+    setHashedTx(null);
+    try {
+      const d = requireHashedDeployment();
+      const token = asset === "hNVDA" ? d.hNVDA : d.hAAPL;
+      setHashedMessage("Claiming 10 " + asset + " from the Monad testnet faucet…");
+      const hash = await walletClient.writeContract({
+        account: walletAddress,
+        chain,
+        address: token,
+        abi: equityTokenAbi,
+        functionName: "faucet",
+      });
+      await waitFor(hash);
+      setHashedMessage("10 " + asset + " claimed. Ready to deposit.");
+      await refreshHashed();
+    } catch (error) {
+      setHashedMessage(error instanceof Error ? error.message : "Faucet claim failed.");
+    } finally {
+      setHashedBusy(false);
+    }
+  }
+
+  async function depositCollateral() {
+    if (!walletClient || !walletAddress) {
+      setHashedMessage("Connect your wallet first.");
+      return;
+    }
+
+    setHashedBusy(true);
+    setHashedTx(null);
+    try {
+      const d = requireHashedDeployment();
+      const token = selectedCollateral === "hNVDA" ? d.hNVDA : d.hAAPL;
+      const amount = parsePositive(collateralAmount, 18);
+
+      setHashedMessage("1/2 Approving " + selectedCollateral + " for the Hashed vault…");
+      const approvalHash = await walletClient.writeContract({
+        account: walletAddress,
+        chain,
+        address: token,
+        abi: equityTokenAbi,
+        functionName: "approve",
+        args: [d.vault, amount],
+      });
+      await waitFor(approvalHash);
+
+      setHashedMessage("2/2 Locking " + selectedCollateral + " as collateral…");
+      const depositHash = await walletClient.writeContract({
+        account: walletAddress,
+        chain,
+        address: d.vault,
+        abi: hashedVaultAbi,
+        functionName: "deposit",
+        args: [token, amount],
+      });
+      await waitFor(depositHash);
+      setHashedMessage("Collateral locked. Borrow power updated onchain.");
+      await refreshHashed();
+    } catch (error) {
+      setHashedMessage(error instanceof Error ? error.message : "Deposit failed.");
+    } finally {
+      setHashedBusy(false);
+    }
+  }
+
+  async function withdrawCollateral() {
+    if (!walletClient || !walletAddress) {
+      setHashedMessage("Connect your wallet first.");
+      return;
+    }
+
+    setHashedBusy(true);
+    setHashedTx(null);
+    try {
+      const d = requireHashedDeployment();
+      const token = selectedCollateral === "hNVDA" ? d.hNVDA : d.hAAPL;
+      const amount = parsePositive(collateralAmount, 18);
+      setHashedMessage("Withdrawing collateral after onchain health check…");
+      const hash = await walletClient.writeContract({
+        account: walletAddress,
+        chain,
+        address: d.vault,
+        abi: hashedVaultAbi,
+        functionName: "withdraw",
+        args: [token, amount],
+      });
+      await waitFor(hash);
+      setHashedMessage("Collateral withdrawn.");
+      await refreshHashed();
+    } catch (error) {
+      setHashedMessage(error instanceof Error ? error.message : "Withdrawal failed.");
+    } finally {
+      setHashedBusy(false);
+    }
+  }
+
+  async function borrowCredit() {
+    if (!walletClient || !walletAddress) {
+      setHashedMessage("Connect your wallet first.");
+      return;
+    }
+
+    setHashedBusy(true);
+    setHashedTx(null);
+    try {
+      const d = requireHashedDeployment();
+      const amount = parsePositive(creditAmount, 6);
+      setHashedMessage("Borrowing hUSD against the live collateral position…");
+      const hash = await walletClient.writeContract({
+        account: walletAddress,
+        chain,
+        address: d.vault,
+        abi: hashedVaultAbi,
+        functionName: "borrow",
+        args: [amount],
+      });
+      await waitFor(hash);
+      setHashedMessage("hUSD borrowed. Health and debt updated onchain.");
+      await refreshHashed();
+    } catch (error) {
+      setHashedMessage(error instanceof Error ? error.message : "Borrow failed.");
+    } finally {
+      setHashedBusy(false);
+    }
+  }
+
+  async function repayCredit() {
+    if (!walletClient || !walletAddress) {
+      setHashedMessage("Connect your wallet first.");
+      return;
+    }
+
+    setHashedBusy(true);
+    setHashedTx(null);
+    try {
+      const d = requireHashedDeployment();
+      const amount = parsePositive(creditAmount, 6);
+
+      setHashedMessage("1/2 Approving hUSD for repayment…");
+      const approvalHash = await walletClient.writeContract({
+        account: walletAddress,
+        chain,
+        address: d.hUSD,
+        abi: hashedUsdAbi,
+        functionName: "approve",
+        args: [d.vault, amount],
+      });
+      await waitFor(approvalHash);
+
+      setHashedMessage("2/2 Repaying hUSD debt…");
+      const repayHash = await walletClient.writeContract({
+        account: walletAddress,
+        chain,
+        address: d.vault,
+        abi: hashedVaultAbi,
+        functionName: "repay",
+        args: [amount],
+      });
+      await waitFor(repayHash);
+      setHashedMessage("Debt repaid. Borrow power restored.");
+      await refreshHashed();
+    } catch (error) {
+      setHashedMessage(error instanceof Error ? error.message : "Repayment failed.");
+    } finally {
+      setHashedBusy(false);
+    }
+  }
+
+  const availableBorrow =
+    state && state.borrowCapacityUsdE18 > state.debtUsdE18
+      ? state.borrowCapacityUsdE18 - state.debtUsdE18
+      : 0n;
+  const selectedWalletBalance =
+    selectedCollateral === "hNVDA" ? state?.walletNvda : state?.walletAapl;
+  const selectedLocked =
+    selectedCollateral === "hNVDA" ? state?.lockedNvda : state?.lockedAapl;
+  const healthClass =
+    !state || state.debtRaw === 0n
+      ? "good"
+      : state.healthFactorE18 < 10n ** 18n
+        ? "danger"
+        : state.healthFactorE18 < 125n * 10n ** 16n
+          ? "warning"
+          : "good";
 
   return (
     <div id="hashed" className="product-page hashed-page">
@@ -517,35 +829,141 @@ function HashedPage() {
         </div>
         <div className="hashed-status-card">
           <small>MONAD TESTNET</small>
-          <strong>{connected ? "CONNECTED" : "PROTOCOL READY"}</strong>
+          <strong>{connected ? "LIVE" : "PROTOCOL READY"}</strong>
           <p>
             Hashed is the stock-backed credit module for 3maryjane. Tokenized-equity collateral
-            becomes a programmable credit line while the clearing engine continues to see the debt
-            and collateral as one portfolio.
+            becomes a programmable credit line, with the Hashed adapter already registered in the
+            3maryjane clearing and risk stack.
           </p>
         </div>
       </section>
 
       <section className="hashed-stat-grid">
-        <div><small>COLLATERAL</small><strong>hNVDA / hAAPL</strong><span>synthetic testnet equities</span></div>
-        <div><small>CREDIT</small><strong>hUSD</strong><span>6-decimal testnet credit unit</span></div>
-        <div><small>INITIAL LTV</small><strong>60–65%</strong><span>asset-specific borrow power</span></div>
-        <div><small>LIQUIDATION</small><strong>75–78%</strong><span>5% liquidation incentive</span></div>
+        <div><small>COLLATERAL VALUE</small><strong>{usd(state?.collateralUsdE18)}</strong><span>live wallet position</span></div>
+        <div><small>BORROW POWER</small><strong>{usd(state?.borrowCapacityUsdE18)}</strong><span>{usd(availableBorrow)} remaining</span></div>
+        <div><small>hUSD DEBT</small><strong>{usd(state?.debtUsdE18)}</strong><span>{tokenAmount(state?.walletHusd, 6, 2)} hUSD in wallet</span></div>
+        <div className={"hashed-health " + healthClass}><small>HEALTH FACTOR</small><strong>{ratio(state?.healthFactorE18)}</strong><span>liquidation below 1.00×</span></div>
+      </section>
+
+      <section className="panel hashed-console">
+        <div className="hashed-console-head">
+          <div>
+            <div className="panel-title"><span>H01</span> LIVE TESTNET CONSOLE</div>
+            <h3>Open a stock-backed credit position.</h3>
+          </div>
+          <div className="hashed-wallet">
+            <small>WALLET</small>
+            <strong className="mono">{walletAddress ? short(walletAddress) : "NOT CONNECTED"}</strong>
+            {walletAddress ? (
+              <button className="button secondary" disabled={hashedBusy} onClick={refreshHashed}>SYNC POSITION</button>
+            ) : (
+              <button className="button" onClick={connectWallet}>CONNECT WALLET</button>
+            )}
+          </div>
+        </div>
+
+        <div className="hashed-live-grid">
+          <div className="hashed-asset-card">
+            <div className="hashed-asset-top">
+              <div><small>DEMO EQUITY</small><strong>hNVDA</strong><span>$100 manual testnet price · 60% LTV</span></div>
+              <button className="button secondary" disabled={hashedBusy || !walletAddress || state?.nvdaClaimed} onClick={() => claimDemo("hNVDA")}>
+                {state?.nvdaClaimed ? "CLAIMED" : "CLAIM 10"}
+              </button>
+            </div>
+            <div className="hashed-balance-row">
+              <span>WALLET <strong>{tokenAmount(state?.walletNvda, 18)} hNVDA</strong></span>
+              <span>LOCKED <strong>{tokenAmount(state?.lockedNvda, 18)} hNVDA</strong></span>
+            </div>
+          </div>
+
+          <div className="hashed-asset-card">
+            <div className="hashed-asset-top">
+              <div><small>DEMO EQUITY</small><strong>hAAPL</strong><span>$200 manual testnet price · 65% LTV</span></div>
+              <button className="button secondary" disabled={hashedBusy || !walletAddress || state?.aaplClaimed} onClick={() => claimDemo("hAAPL")}>
+                {state?.aaplClaimed ? "CLAIMED" : "CLAIM 10"}
+              </button>
+            </div>
+            <div className="hashed-balance-row">
+              <span>WALLET <strong>{tokenAmount(state?.walletAapl, 18)} hAAPL</strong></span>
+              <span>LOCKED <strong>{tokenAmount(state?.lockedAapl, 18)} hAAPL</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <div className="hashed-action-grid">
+          <div className="hashed-action-box">
+            <div className="hashed-action-label"><span>01</span> COLLATERAL</div>
+            <div className="hashed-asset-switch">
+              <button type="button" className={selectedCollateral === "hNVDA" ? "active" : ""} onClick={() => setSelectedCollateral("hNVDA")}>hNVDA</button>
+              <button type="button" className={selectedCollateral === "hAAPL" ? "active" : ""} onClick={() => setSelectedCollateral("hAAPL")}>hAAPL</button>
+            </div>
+            <label>
+              AMOUNT
+              <input value={collateralAmount} onChange={(event) => setCollateralAmount(event.target.value)} inputMode="decimal" placeholder="1.0" />
+            </label>
+            <div className="hashed-mini-state">
+              <span>WALLET {tokenAmount(selectedWalletBalance, 18)}</span>
+              <span>LOCKED {tokenAmount(selectedLocked, 18)}</span>
+            </div>
+            <div className="hashed-action-buttons">
+              <button className="button" disabled={hashedBusy || !walletAddress} onClick={depositCollateral}>DEPOSIT</button>
+              <button className="button secondary" disabled={hashedBusy || !walletAddress} onClick={withdrawCollateral}>WITHDRAW</button>
+            </div>
+          </div>
+
+          <div className="hashed-action-box">
+            <div className="hashed-action-label"><span>02</span> CREDIT</div>
+            <div className="hashed-credit-symbol">hUSD</div>
+            <label>
+              AMOUNT
+              <input value={creditAmount} onChange={(event) => setCreditAmount(event.target.value)} inputMode="decimal" placeholder="100" />
+            </label>
+            <div className="hashed-mini-state">
+              <span>AVAILABLE {usd(availableBorrow)}</span>
+              <span>WALLET {tokenAmount(state?.walletHusd, 6, 2)} hUSD</span>
+            </div>
+            <div className="hashed-action-buttons">
+              <button className="button" disabled={hashedBusy || !walletAddress} onClick={borrowCredit}>BORROW</button>
+              <button className="button secondary" disabled={hashedBusy || !walletAddress || !state?.debtRaw} onClick={repayCredit}>REPAY</button>
+            </div>
+          </div>
+
+          <div className="hashed-position-box">
+            <div className="hashed-action-label"><span>03</span> POSITION RISK</div>
+            <div className="hashed-risk-readout">
+              <div><small>COLLATERAL</small><strong>{usd(state?.collateralUsdE18)}</strong></div>
+              <div><small>DEBT</small><strong>{usd(state?.debtUsdE18)}</strong></div>
+              <div><small>LIQUIDATION CAPACITY</small><strong>{usd(state?.liquidationCapacityUsdE18)}</strong></div>
+              <div><small>HEALTH</small><strong className={healthClass}>{ratio(state?.healthFactorE18)}</strong></div>
+            </div>
+            <p>Withdrawals and new borrowing are rejected onchain when they would exceed the configured collateral limits.</p>
+          </div>
+        </div>
+
+        <div className="hashed-console-status">
+          <span className={hashedBusy ? "pulse" : ""}>{hashedBusy ? "CONFIRM IN WALLET / WAITING FOR MONAD" : hashedMessage}</span>
+          {hashedTx && <strong className="mono">TX {short(hashedTx)}</strong>}
+        </div>
+        <p className="hashed-demo-note">
+          Judge demo path: claim hNVDA or hAAPL → deposit → borrow hUSD → repay → withdraw.
+          This console interacts directly with the Hashed vault for a simple wallet demo; the separately deployed
+          HashedAdapter is active in the 3maryjane clearing stack for programmable accounts.
+        </p>
       </section>
 
       <section className="two-col hashed-columns">
         <div className="panel">
-          <div className="panel-title"><span>H01</span> CREDIT FLOW</div>
+          <div className="panel-title"><span>H02</span> CREDIT FLOW</div>
           <div className="hashed-steps">
             <div><span>01</span><strong>LOCK EQUITY</strong><small>Deposit supported tokenized-equity collateral into the Hashed vault.</small></div>
             <div><span>02</span><strong>BORROW hUSD</strong><small>Mint credit up to the asset-specific LTV without selling the collateral.</small></div>
-            <div><span>03</span><strong>CLEAR THE POSITION</strong><small>HashedAdapter sends collateral and debt into the existing 3maryjane risk engine.</small></div>
+            <div><span>03</span><strong>CLEAR THE POSITION</strong><small>HashedAdapter exposes collateral and debt to the existing 3maryjane risk engine.</small></div>
             <div><span>04</span><strong>DEFEND OR LIQUIDATE</strong><small>Health falls with collateral value; unsafe positions become liquidatable onchain.</small></div>
           </div>
         </div>
 
         <div className="panel">
-          <div className="panel-title"><span>H02</span> TESTNET DEPLOYMENT</div>
+          <div className="panel-title"><span>H03</span> TESTNET DEPLOYMENT</div>
           <div className="hashed-deployment">
             {deploymentRows.map(([label, address]) => (
               <div key={label}>
@@ -555,20 +973,20 @@ function HashedPage() {
             ))}
           </div>
           <p className="hashed-note">
-            The demo equity tokens and manual prices are testnet-only. They are not real shares and
-            are not production oracle infrastructure.
+            Demo equity tokens and manual prices are testnet-only. They are not real shares,
+            production stablecoins, or production oracle infrastructure.
           </p>
         </div>
       </section>
 
       <section className="hashed-thesis">
-        <div className="panel-title"><span>H03</span> WHY HASHED EXISTS</div>
+        <div className="panel-title"><span>H04</span> WHY HASHED EXISTS</div>
         <h3>Credit should understand the portfolio it is lending against.</h3>
         <p>
           A normal lending market sees collateral in isolation. Hashed is built inside 3maryjane:
-          its collateral and debt normalize into the same clearing layer that already tracks
-          cross-protocol exposure. The first market is equity-backed credit; the architecture can
-          later extend to verified real-world-asset collateral without changing the clearing model.
+          its collateral and debt normalize into the same clearing architecture that tracks
+          cross-protocol exposure. The first market is testnet equity-backed credit; the architecture
+          can later extend to verified real-world-asset collateral without changing the clearing model.
         </p>
       </section>
     </div>
