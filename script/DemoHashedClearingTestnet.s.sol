@@ -5,7 +5,6 @@ import {CLAccount} from "../src/CLAccount.sol";
 import {AdapterRegistry} from "../src/AdapterRegistry.sol";
 import {HashedCreditVault} from "../src/hashed/HashedCreditVault.sol";
 import {RiskPolicyManager} from "../src/risk/RiskPolicyManager.sol";
-import {RiskTypes} from "../src/types/RiskTypes.sol";
 
 interface VmDemoHashedClearing {
     function envUint(string calldata) external returns (uint256);
@@ -30,6 +29,25 @@ contract DemoHashedClearingTestnet {
     uint256 internal constant COLLATERAL_AMOUNT = 1e18; // 1 hNVDA
     uint256 internal constant BORROW_AMOUNT = 25e6; // 25 hUSD
 
+    struct DemoConfig {
+        uint256 key;
+        address signer;
+        CLAccount account;
+        AdapterRegistry registry;
+        RiskPolicyManager policyManager;
+        HashedCreditVault vault;
+        address adapter;
+        address hNVDA;
+        address hUSD;
+    }
+
+    struct Snapshot {
+        uint256 walletCollateral;
+        uint256 accountLoose;
+        uint256 locked;
+        uint256 debt;
+    }
+
     error WrongChain(uint256 chainId);
     error WrongOwner(address expected, address actual);
     error AdapterNotReady();
@@ -39,7 +57,6 @@ contract DemoHashedClearingTestnet {
     error RiskCheckFailed(bytes32 reason);
     error StateNotRestored();
 
-    event DemoStep(string step, bytes32 txLabel);
     event DemoComplete(
         address indexed account,
         address indexed adapter,
@@ -51,60 +68,101 @@ contract DemoHashedClearingTestnet {
     function run() external {
         if (block.chainid != 10143) revert WrongChain(block.chainid);
 
-        uint256 key = vm.envUint("PRIVATE_KEY");
-        address signer = vm.addr(key);
+        DemoConfig memory config = _loadConfig();
+        Snapshot memory beforeState = _preflight(config);
 
-        CLAccount account = CLAccount(payable(vm.envAddress("CL_ACCOUNT")));
-        AdapterRegistry registry = AdapterRegistry(vm.envAddress("CL_ADAPTER_REGISTRY"));
-        RiskPolicyManager policyManager = RiskPolicyManager(vm.envAddress("CL_RISK_POLICY_MANAGER"));
-        HashedCreditVault vault = HashedCreditVault(vm.envAddress("HASHED_VAULT"));
-        address adapter = vm.envAddress("HASHED_ADAPTER");
-        address hNVDA = vm.envAddress("HASHED_NVDA");
-        address hUSD = vm.envAddress("HASHED_USD");
+        _executeRoundTrip(config);
+        _verifyRestored(config, beforeState);
 
-        if (account.owner() != signer) revert WrongOwner(account.owner(), signer);
-        if (!registry.isAdapterActive(adapter) || !account.authorizedAdapter(adapter)) revert AdapterNotReady();
-        if (!policyManager.isAdapterCovered(address(account), adapter)) revert AdapterNotCovered();
+        emit DemoComplete(
+            address(config.account),
+            config.adapter,
+            config.hNVDA,
+            COLLATERAL_AMOUNT,
+            BORROW_AMOUNT
+        );
+    }
 
-        uint256 walletCollateralBefore = IERC20Demo(hNVDA).balanceOf(signer);
-        uint256 accountLooseBefore = IERC20Demo(hNVDA).balanceOf(address(account));
-        uint256 lockedBefore = vault.collateralOf(address(account), hNVDA);
-        uint256 debtBefore = vault.debtOf(address(account));
+    function _loadConfig() internal returns (DemoConfig memory config) {
+        config.key = vm.envUint("PRIVATE_KEY");
+        config.signer = vm.addr(config.key);
+        config.account = CLAccount(payable(vm.envAddress("CL_ACCOUNT")));
+        config.registry = AdapterRegistry(vm.envAddress("CL_ADAPTER_REGISTRY"));
+        config.policyManager = RiskPolicyManager(vm.envAddress("CL_RISK_POLICY_MANAGER"));
+        config.vault = HashedCreditVault(vm.envAddress("HASHED_VAULT"));
+        config.adapter = vm.envAddress("HASHED_ADAPTER");
+        config.hNVDA = vm.envAddress("HASHED_NVDA");
+        config.hUSD = vm.envAddress("HASHED_USD");
+    }
 
-        if (walletCollateralBefore < COLLATERAL_AMOUNT) {
-            revert InsufficientDemoCollateral(walletCollateralBefore);
+    function _preflight(DemoConfig memory config) internal view returns (Snapshot memory beforeState) {
+        address expectedOwner = config.account.owner();
+        if (expectedOwner != config.signer) revert WrongOwner(expectedOwner, config.signer);
+
+        if (!config.registry.isAdapterActive(config.adapter) || !config.account.authorizedAdapter(config.adapter)) {
+            revert AdapterNotReady();
+        }
+        if (!config.policyManager.isAdapterCovered(address(config.account), config.adapter)) {
+            revert AdapterNotCovered();
         }
 
-        vm.startBroadcast(key);
+        beforeState.walletCollateral = IERC20Demo(config.hNVDA).balanceOf(config.signer);
+        beforeState.accountLoose = IERC20Demo(config.hNVDA).balanceOf(address(config.account));
+        beforeState.locked = config.vault.collateralOf(address(config.account), config.hNVDA);
+        beforeState.debt = config.vault.debtOf(address(config.account));
 
-        // Fund the user-owned clearing account.
-        if (!IERC20Demo(hNVDA).transfer(address(account), COLLATERAL_AMOUNT)) revert TokenTransferFailed();
+        if (beforeState.walletCollateral < COLLATERAL_AMOUNT) {
+            revert InsufficientDemoCollateral(beforeState.walletCollateral);
+        }
+    }
 
-        // Execute every credit transition through the registered Hashed adapter.
-        account.execute(adapter, abi.encode(uint8(0), hNVDA, COLLATERAL_AMOUNT)); // DEPOSIT
-        account.execute(adapter, abi.encode(uint8(2), hUSD, BORROW_AMOUNT)); // BORROW
+    function _executeRoundTrip(DemoConfig memory config) internal {
+        vm.startBroadcast(config.key);
 
-        (bool okAfterBorrow, bytes32 reasonAfterBorrow,,) = policyManager.check(address(account));
-        if (!okAfterBorrow) revert RiskCheckFailed(reasonAfterBorrow);
+        if (!IERC20Demo(config.hNVDA).transfer(address(config.account), COLLATERAL_AMOUNT)) {
+            revert TokenTransferFailed();
+        }
 
-        account.execute(adapter, abi.encode(uint8(3), hUSD, BORROW_AMOUNT)); // REPAY
-        account.execute(adapter, abi.encode(uint8(1), hNVDA, COLLATERAL_AMOUNT)); // WITHDRAW
+        config.account.execute(
+            config.adapter,
+            abi.encode(uint8(0), config.hNVDA, COLLATERAL_AMOUNT)
+        ); // DEPOSIT
 
-        // Return the now-unlocked asset from CLAccount to the owner wallet.
-        account.withdraw(hNVDA, signer, COLLATERAL_AMOUNT);
+        config.account.execute(
+            config.adapter,
+            abi.encode(uint8(2), config.hUSD, BORROW_AMOUNT)
+        ); // BORROW
+
+        _requirePolicyPass(config);
+
+        config.account.execute(
+            config.adapter,
+            abi.encode(uint8(3), config.hUSD, BORROW_AMOUNT)
+        ); // REPAY
+
+        config.account.execute(
+            config.adapter,
+            abi.encode(uint8(1), config.hNVDA, COLLATERAL_AMOUNT)
+        ); // WITHDRAW
+
+        config.account.withdraw(config.hNVDA, config.signer, COLLATERAL_AMOUNT);
 
         vm.stopBroadcast();
+    }
 
-        (bool okFinal, bytes32 finalReason,,) = policyManager.check(address(account));
-        if (!okFinal) revert RiskCheckFailed(finalReason);
+    function _requirePolicyPass(DemoConfig memory config) internal view {
+        (bool ok, bytes32 reason,,) = config.policyManager.check(address(config.account));
+        if (!ok) revert RiskCheckFailed(reason);
+    }
+
+    function _verifyRestored(DemoConfig memory config, Snapshot memory beforeState) internal view {
+        _requirePolicyPass(config);
 
         if (
-            IERC20Demo(hNVDA).balanceOf(signer) != walletCollateralBefore
-                || IERC20Demo(hNVDA).balanceOf(address(account)) != accountLooseBefore
-                || vault.collateralOf(address(account), hNVDA) != lockedBefore
-                || vault.debtOf(address(account)) != debtBefore
+            IERC20Demo(config.hNVDA).balanceOf(config.signer) != beforeState.walletCollateral
+                || IERC20Demo(config.hNVDA).balanceOf(address(config.account)) != beforeState.accountLoose
+                || config.vault.collateralOf(address(config.account), config.hNVDA) != beforeState.locked
+                || config.vault.debtOf(address(config.account)) != beforeState.debt
         ) revert StateNotRestored();
-
-        emit DemoComplete(address(account), adapter, hNVDA, COLLATERAL_AMOUNT, BORROW_AMOUNT);
     }
 }
