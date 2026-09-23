@@ -32,11 +32,11 @@ const rpcUrl = import.meta.env.VITE_CL_RPC_URL as string | undefined;
 const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
 
 const hashedDeployment = {
-  vault: envAddress("VITE_HASHED_VAULT"),
-  adapter: envAddress("VITE_HASHED_ADAPTER"),
-  hUSD: envAddress("VITE_HASHED_USD"),
-  hNVDA: envAddress("VITE_HASHED_NVDA"),
-  hAAPL: envAddress("VITE_HASHED_AAPL"),
+  vault: envAddress("VITE_HASHED_VAULT") ?? (chain.id === 10143 ? "0x63814b52f6c2d366598dc7ed47eb364b41cf9a15" as Address : undefined),
+  adapter: envAddress("VITE_HASHED_ADAPTER") ?? (chain.id === 10143 ? "0xF43bc85317345Ce54Fa616440b9b76AF276866eb" as Address : undefined),
+  hUSD: envAddress("VITE_HASHED_USD") ?? (chain.id === 10143 ? "0xdcc5b92d7e99f4f31527121a402516f69d3edc27" as Address : undefined),
+  hNVDA: envAddress("VITE_HASHED_NVDA") ?? (chain.id === 10143 ? "0x2ac57e9246e11cbf9899d276f2571d2b4cdfffac" as Address : undefined),
+  hAAPL: envAddress("VITE_HASHED_AAPL") ?? (chain.id === 10143 ? "0x4edd0c5532cdc7c88c91eecbdf355b62ef309cb9" as Address : undefined),
 };
 
 function envAddress(key: string): Address | undefined {
