@@ -15,6 +15,7 @@ import {
 } from "viem";
 import {
   createCLClient,
+  encodeHashed,
   euler,
   kuru,
   monadMainnet,
@@ -39,6 +40,7 @@ const hashedDeployment = {
   hUSD: envAddress("VITE_HASHED_USD") ?? (chain.id === 10143 ? "0xdcc5b92d7e99f4f31527121a402516f69d3edc27" as Address : undefined),
   hNVDA: envAddress("VITE_HASHED_NVDA") ?? (chain.id === 10143 ? "0x2ac57e9246e11cbf9899d276f2571d2b4cdfffac" as Address : undefined),
   hAAPL: envAddress("VITE_HASHED_AAPL") ?? (chain.id === 10143 ? "0x4edd0c5532cdc7c88c91eecbdf355b62ef309cb9" as Address : undefined),
+  demoAccount: envAddress("VITE_CL_DEMO_ACCOUNT") ?? (chain.id === 10143 ? "0x38Ac1B6b3ec3eD28E0b49C5331b01151D1C3577f" as Address : undefined),
 };
 
 const equityTokenAbi = parseAbi([
@@ -83,6 +85,22 @@ type HashedReadState = {
   aaplClaimed: boolean;
 };
 
+type HashedClearingState = {
+  owner: Address;
+  riskGuardEnabled: boolean;
+  risk: RiskSnapshot;
+  recommendation: SolverRecommendation | null;
+  coveredAdapters: Address[];
+  accountNvda: bigint;
+  accountAapl: bigint;
+  accountHusd: bigint;
+  lockedNvda: bigint;
+  lockedAapl: bigint;
+  debtRaw: bigint;
+  borrowCapacityUsdE18: bigint;
+  healthFactorE18: bigint;
+};
+
 function envAddress(key: string): Address | undefined {
   const value = import.meta.env[key] as string | undefined;
   return value && isAddress(value) ? (getAddress(value) as Address) : undefined;
@@ -109,6 +127,7 @@ const deployment: CLDeployment = {
     ...(envAddress("VITE_CL_WALLET_BALANCE_ADAPTER")
       ? { WalletBalance: envAddress("VITE_CL_WALLET_BALANCE_ADAPTER")! }
       : {}),
+    ...(hashedDeployment.adapter ? { Hashed: hashedDeployment.adapter } : {}),
   },
 };
 
@@ -319,6 +338,7 @@ export default function App() {
     ["PERPL", chain.id === 143 ? perpl[143].exchange : perpl[10143].exchange, deployment.adapters?.Perpl],
     ["EULER", chain.id === 143 ? euler[143].evc : undefined, deployment.adapters?.Euler],
     ["FREE COLLATERAL", undefined, deployment.adapters?.WalletBalance],
+    ["HASHED", hashedDeployment.vault, deployment.adapters?.Hashed],
   ] as const;
 
   return (
@@ -393,7 +413,7 @@ export default function App() {
             <div className="setup-status">
               <div><span>CORE</span><strong>{coreConfigured ? "READY" : "MISSING"}</strong></div>
               <div><span>RISK STACK</span><strong>{riskConfigured ? "READY" : "MISSING"}</strong></div>
-              <div><span>ADAPTERS</span><strong>{configuredAdapterCount}/4</strong></div>
+              <div><span>ADAPTERS</span><strong>{configuredAdapterCount} LIVE</strong></div>
               <div><span>MISSING</span><strong>{missingConfig.length ? missingConfig.join(" · ") : "NONE"}</strong></div>
             </div>
           </section>
@@ -532,6 +552,17 @@ function HashedPage({
     "Connect a wallet to claim demo equity and open a live Hashed testnet position."
   );
   const [hashedTx, setHashedTx] = useState<Hex | null>(null);
+  const clearingReader = useMemo(() => createCLClient({ publicClient, deployment }), []);
+  const [clearingAccountInput, setClearingAccountInput] = useState(hashedDeployment.demoAccount ?? "");
+  const [clearingState, setClearingState] = useState<HashedClearingState | null>(null);
+  const [clearingBusy, setClearingBusy] = useState(false);
+  const [clearingMessage, setClearingMessage] = useState(
+    "Load the configured 3maryjane account to prove Hashed is part of the unified portfolio."
+  );
+  const [clearingTx, setClearingTx] = useState<Hex | null>(null);
+  const clearingAccount = isAddress(clearingAccountInput)
+    ? (getAddress(clearingAccountInput) as Address)
+    : null;
 
   const deploymentRows = [
     ["CREDIT VAULT", hashedDeployment.vault],
@@ -803,6 +834,160 @@ function HashedPage({
     }
   }
 
+  async function refreshClearing() {
+    if (!clearingAccount) {
+      setClearingMessage("Enter a valid 3maryjane account address.");
+      return;
+    }
+
+    setClearingBusy(true);
+    try {
+      const d = requireHashedDeployment();
+      const [
+        accountState,
+        nextRisk,
+        coveredAdapters,
+        solver,
+        accountNvda,
+        accountAapl,
+        accountHusd,
+        lockedNvda,
+        lockedAapl,
+        debtRaw,
+        borrowCapacityUsdE18,
+        healthFactorE18,
+      ] = await Promise.all([
+        clearingReader.getAccountState(clearingAccount),
+        clearingReader.getRisk(clearingAccount),
+        clearingReader.getCoveredAdapters(clearingAccount),
+        clearingReader.getSolverRecommendation(clearingAccount),
+        clearingReader.tokenBalance(d.hNVDA, clearingAccount),
+        clearingReader.tokenBalance(d.hAAPL, clearingAccount),
+        clearingReader.tokenBalance(d.hUSD, clearingAccount),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "collateralOf", args: [clearingAccount, d.hNVDA] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "collateralOf", args: [clearingAccount, d.hAAPL] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "debtOf", args: [clearingAccount] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "borrowCapacityUsdE18", args: [clearingAccount] }),
+        publicClient.readContract({ address: d.vault, abi: hashedVaultAbi, functionName: "healthFactorE18", args: [clearingAccount] }),
+      ]);
+
+      setClearingState({
+        owner: accountState.owner,
+        riskGuardEnabled: accountState.riskGuardEnabled,
+        risk: nextRisk,
+        recommendation: solver.recommendation,
+        coveredAdapters,
+        accountNvda,
+        accountAapl,
+        accountHusd,
+        lockedNvda,
+        lockedAapl,
+        debtRaw,
+        borrowCapacityUsdE18,
+        healthFactorE18,
+      });
+      setClearingMessage("Unified portfolio synced. Hashed, Perpl and free collateral are read through one risk policy.");
+    } catch (error) {
+      setClearingMessage(error instanceof Error ? error.message : "Failed to load unified clearing state.");
+    } finally {
+      setClearingBusy(false);
+    }
+  }
+
+  async function clearingWriter() {
+    if (!walletClient || !walletAddress) throw new Error("Connect the owner wallet first.");
+    if (!clearingAccount) throw new Error("Enter a valid 3maryjane account.");
+    if (!hashedDeployment.adapter) throw new Error("Hashed adapter is not configured.");
+    const state = await clearingReader.getAccountState(clearingAccount);
+    if (state.owner.toLowerCase() !== walletAddress.toLowerCase()) {
+      throw new Error("Connected wallet is not the owner of this 3maryjane account.");
+    }
+    return createCLClient({ publicClient, walletClient, deployment });
+  }
+
+  async function waitClearing(hash: Hex, message: string) {
+    setClearingTx(hash);
+    setClearingMessage(message);
+    await publicClient.waitForTransactionReceipt({ hash });
+  }
+
+  async function fundClearingAccount() {
+    setClearingBusy(true);
+    setClearingTx(null);
+    try {
+      const d = requireHashedDeployment();
+      const writer = await clearingWriter();
+      const token = selectedCollateral === "hNVDA" ? d.hNVDA : d.hAAPL;
+      const amount = parsePositive(collateralAmount, 18);
+
+      const approveHash = await writer.approveToken(token, clearingAccount!, amount);
+      await waitClearing(approveHash, "1/2 Approving " + selectedCollateral + " for the 3maryjane account…");
+
+      const depositHash = await writer.depositToken(clearingAccount!, token, amount);
+      await waitClearing(depositHash, "2/2 Funding the 3maryjane account…");
+
+      setClearingMessage(selectedCollateral + " funded into the user-owned 3maryjane account.");
+      await refreshClearing();
+      await refreshHashed();
+    } catch (error) {
+      setClearingMessage(error instanceof Error ? error.message : "Clearing-account funding failed.");
+    } finally {
+      setClearingBusy(false);
+    }
+  }
+
+  async function executeHashedFromClearing(kind: "deposit" | "withdraw" | "borrow" | "repay") {
+    setClearingBusy(true);
+    setClearingTx(null);
+    try {
+      const d = requireHashedDeployment();
+      const writer = await clearingWriter();
+      const token = selectedCollateral === "hNVDA" ? d.hNVDA : d.hAAPL;
+      const action =
+        kind === "deposit"
+          ? encodeHashed.deposit(token, parsePositive(collateralAmount, 18))
+          : kind === "withdraw"
+            ? encodeHashed.withdraw(token, parsePositive(collateralAmount, 18))
+            : kind === "borrow"
+              ? encodeHashed.borrow(d.hUSD, parsePositive(creditAmount, 6))
+              : encodeHashed.repay(d.hUSD, parsePositive(creditAmount, 6));
+
+      const hash = await writer.execute(clearingAccount!, hashedDeployment.adapter!, action);
+      await waitClearing(hash, "Executing Hashed through the 3maryjane account and validating portfolio risk…");
+      setClearingMessage("Hashed adapter execution confirmed. Unified portfolio risk passed onchain.");
+      await refreshClearing();
+    } catch (error) {
+      setClearingMessage(error instanceof Error ? error.message : "3maryjane Hashed execution failed.");
+    } finally {
+      setClearingBusy(false);
+    }
+  }
+
+  async function returnCollateralToWallet() {
+    if (!walletAddress) {
+      setClearingMessage("Connect the owner wallet first.");
+      return;
+    }
+
+    setClearingBusy(true);
+    setClearingTx(null);
+    try {
+      const d = requireHashedDeployment();
+      const writer = await clearingWriter();
+      const token = selectedCollateral === "hNVDA" ? d.hNVDA : d.hAAPL;
+      const amount = parsePositive(collateralAmount, 18);
+      const hash = await writer.withdraw(clearingAccount!, token, walletAddress, amount);
+      await waitClearing(hash, "Returning unlocked collateral from the 3maryjane account…");
+      setClearingMessage(selectedCollateral + " returned to the owner wallet.");
+      await refreshClearing();
+      await refreshHashed();
+    } catch (error) {
+      setClearingMessage(error instanceof Error ? error.message : "Account withdrawal failed.");
+    } finally {
+      setClearingBusy(false);
+    }
+  }
+
   const availableBorrow =
     state && state.borrowCapacityUsdE18 > state.debtUsdE18
       ? state.borrowCapacityUsdE18 - state.debtUsdE18
@@ -945,15 +1130,128 @@ function HashedPage({
           {hashedTx && <strong className="mono">TX {short(hashedTx)}</strong>}
         </div>
         <p className="hashed-demo-note">
-          Judge demo path: claim hNVDA or hAAPL → deposit → borrow hUSD → repay → withdraw.
-          This console interacts directly with the Hashed vault for a simple wallet demo; the separately deployed
-          HashedAdapter is active in the 3maryjane clearing stack for programmable accounts.
+          Quick vault demo: claim hNVDA or hAAPL → deposit → borrow hUSD → repay → withdraw.
+          The unified clearing demo below executes the same credit actions through HashedAdapter from the user-owned
+          3maryjane account and validates the combined portfolio after every action.
         </p>
+      </section>
+
+      <section className="panel hashed-clearing-demo">
+        <div className="hashed-clearing-head">
+          <div>
+            <div className="panel-title"><span>H02</span> UNIFIED CLEARING DEMO</div>
+            <h3>Hashed inside the actual 3maryjane account.</h3>
+            <p>
+              Fund the clearing account, execute Hashed through the registered adapter, then watch equity collateral,
+              hUSD debt, Perpl and free collateral resolve into one portfolio-risk surface.
+            </p>
+          </div>
+          <div className="hashed-clearing-account">
+            <label>3MARYJANE ACCOUNT</label>
+            <div className="input-row">
+              <input
+                value={clearingAccountInput}
+                onChange={(event) => setClearingAccountInput(event.target.value)}
+                placeholder="0x…"
+                spellCheck={false}
+              />
+              <button className="button secondary" disabled={clearingBusy || !clearingAccount} onClick={refreshClearing}>
+                {clearingBusy ? "SYNCING" : "LOAD"}
+              </button>
+            </div>
+            <small>
+              {clearingState
+                ? "OWNER " + short(clearingState.owner) + (walletAddress && clearingState.owner.toLowerCase() === walletAddress.toLowerCase() ? " · CONNECTED OWNER" : " · READ ONLY")
+                : "Default: deployed Monad testnet demo account"}
+            </small>
+          </div>
+        </div>
+
+        <div className="hashed-clearing-metrics">
+          <div><small>PORTFOLIO EQUITY</small><strong>{usd(clearingState?.risk.metrics.equityUsd)}</strong></div>
+          <div><small>TOTAL DEBT</small><strong>{usd(clearingState?.risk.metrics.debtUsd)}</strong></div>
+          <div><small>GROSS EXPOSURE</small><strong>{usd(clearingState?.risk.metrics.grossExposureUsd)}</strong></div>
+          <div><small>PORTFOLIO HEALTH</small><strong>{ratio(clearingState?.risk.metrics.healthE18)}</strong></div>
+          <div><small>RISK SOLVER</small><strong>{clearingState?.recommendation?.action ?? "—"}</strong></div>
+          <div><small>POLICY</small><strong>{clearingState ? (clearingState.risk.ok ? "PASS" : "BREACH") : "—"}</strong></div>
+        </div>
+
+        <div className="hashed-clearing-grid">
+          <div className="hashed-clearing-actions">
+            <div className="hashed-action-label"><span>A</span> ACCOUNT INVENTORY</div>
+            <div className="hashed-account-balances">
+              <div><span>hNVDA IN ACCOUNT</span><strong>{tokenAmount(clearingState?.accountNvda, 18)}</strong></div>
+              <div><span>hAAPL IN ACCOUNT</span><strong>{tokenAmount(clearingState?.accountAapl, 18)}</strong></div>
+              <div><span>hUSD IN ACCOUNT</span><strong>{tokenAmount(clearingState?.accountHusd, 6, 2)}</strong></div>
+              <div><span>HASHED DEBT</span><strong>{tokenAmount(clearingState?.debtRaw, 6, 2)}</strong></div>
+            </div>
+            <div className="hashed-clearing-buttons">
+              <button className="button" disabled={clearingBusy || !walletAddress || !clearingAccount} onClick={fundClearingAccount}>
+                1 · FUND ACCOUNT
+              </button>
+              <button className="button" disabled={clearingBusy || !walletAddress || !clearingAccount} onClick={() => executeHashedFromClearing("deposit")}>
+                2 · LOCK VIA ADAPTER
+              </button>
+              <button className="button" disabled={clearingBusy || !walletAddress || !clearingAccount} onClick={() => executeHashedFromClearing("borrow")}>
+                3 · BORROW VIA ADAPTER
+              </button>
+              <button className="button secondary" disabled={clearingBusy || !walletAddress || !clearingAccount} onClick={() => executeHashedFromClearing("repay")}>
+                4 · REPAY VIA ADAPTER
+              </button>
+              <button className="button secondary" disabled={clearingBusy || !walletAddress || !clearingAccount} onClick={() => executeHashedFromClearing("withdraw")}>
+                5 · UNLOCK VIA ADAPTER
+              </button>
+              <button className="button secondary" disabled={clearingBusy || !walletAddress || !clearingAccount} onClick={returnCollateralToWallet}>
+                6 · RETURN TO WALLET
+              </button>
+            </div>
+            <p className="hashed-clearing-help">
+              Uses the same selected collateral and amounts from the live console above. Owner-only adapter execution is
+              enforced by the 3maryjane account; every adapter action is followed by the configured portfolio-risk check.
+            </p>
+          </div>
+
+          <div className="hashed-clearing-risk">
+            <div className="hashed-action-label"><span>B</span> CROSS-PROTOCOL RISK</div>
+            <div className="hashed-covered-line">
+              <span>RISK GUARD</span><strong>{clearingState?.riskGuardEnabled ? "ENFORCED" : "—"}</strong>
+              <span>HASHED COVERED</span><strong>{clearingState && hashedDeployment.adapter
+                ? (clearingState.coveredAdapters.some((adapter) => adapter.toLowerCase() === hashedDeployment.adapter!.toLowerCase()) ? "YES" : "NO")
+                : "—"}</strong>
+            </div>
+            <div className="hashed-exposure-table">
+              <div className="hashed-exposure-row head"><span>ASSET</span><span>NET</span><span>GROSS</span><span>MM</span></div>
+              {clearingState?.risk.exposures.length ? clearingState.risk.exposures.map((exposure) => {
+                const label =
+                  hashedDeployment.hNVDA && exposure.asset.toLowerCase() === hashedDeployment.hNVDA.toLowerCase()
+                    ? "hNVDA"
+                    : hashedDeployment.hAAPL && exposure.asset.toLowerCase() === hashedDeployment.hAAPL.toLowerCase()
+                      ? "hAAPL"
+                      : hashedDeployment.hUSD && exposure.asset.toLowerCase() === hashedDeployment.hUSD.toLowerCase()
+                        ? "hUSD"
+                        : short(exposure.asset);
+                return (
+                  <div className="hashed-exposure-row" key={exposure.asset}>
+                    <span>{label}</span>
+                    <strong>{usd(exposure.netUsd)}</strong>
+                    <strong>{usd(exposure.grossUsd)}</strong>
+                    <strong>{usd(exposure.maintenanceMarginUsd)}</strong>
+                  </div>
+                );
+              }) : <div className="empty">LOAD THE ACCOUNT TO READ THE UNIFIED RISK SURFACE</div>}
+            </div>
+          </div>
+        </div>
+
+        <div className="hashed-console-status">
+          <span className={clearingBusy ? "pulse" : ""}>{clearingBusy ? "CONFIRM IN WALLET / VALIDATING ON MONAD" : clearingMessage}</span>
+          {clearingTx && <strong className="mono">TX {short(clearingTx)}</strong>}
+        </div>
       </section>
 
       <section className="two-col hashed-columns">
         <div className="panel">
-          <div className="panel-title"><span>H02</span> CREDIT FLOW</div>
+          <div className="panel-title"><span>H03</span> CREDIT FLOW</div>
           <div className="hashed-steps">
             <div><span>01</span><strong>LOCK EQUITY</strong><small>Deposit supported tokenized-equity collateral into the Hashed vault.</small></div>
             <div><span>02</span><strong>BORROW hUSD</strong><small>Mint credit up to the asset-specific LTV without selling the collateral.</small></div>
@@ -963,7 +1261,7 @@ function HashedPage({
         </div>
 
         <div className="panel">
-          <div className="panel-title"><span>H03</span> TESTNET DEPLOYMENT</div>
+          <div className="panel-title"><span>H04</span> TESTNET DEPLOYMENT</div>
           <div className="hashed-deployment">
             {deploymentRows.map(([label, address]) => (
               <div key={label}>
@@ -980,7 +1278,7 @@ function HashedPage({
       </section>
 
       <section className="hashed-thesis">
-        <div className="panel-title"><span>H04</span> WHY HASHED EXISTS</div>
+        <div className="panel-title"><span>H05</span> WHY HASHED EXISTS</div>
         <h3>Credit should understand the portfolio it is lending against.</h3>
         <p>
           A normal lending market sees collateral in isolation. Hashed is built inside 3maryjane:
