@@ -207,33 +207,13 @@ contract HashedCreditVault {
         if (requestedRepay == 0) revert ZeroAmount();
         if (healthFactorE18(account) >= WAD) revert HealthyAccount();
 
-        CollateralConfig memory config = collateralConfig[collateralAsset];
-        if (!config.enabled) revert UnsupportedCollateral(collateralAsset);
-
-        uint256 availableCollateral = collateralOf[account][collateralAsset];
-        if (availableCollateral == 0) revert ZeroAmount();
-
-        uint256 debt = debtOf[account];
-        repaid = requestedRepay > debt ? debt : requestedRepay;
-
-        uint256 collateralValueUsd = _valueUsdE18(collateralAsset, availableCollateral, config.decimals);
-        uint256 maxRepayUsd = (collateralValueUsd * BPS) / (BPS + config.liquidationBonusBps);
-        uint256 maxRepayRaw = _fromUsdE18(maxRepayUsd);
-
-        if (repaid > maxRepayRaw) repaid = maxRepayRaw;
-        if (repaid == 0) revert ZeroAmount();
-
-        uint256 repayUsd = _debtUsdE18(repaid);
-        uint256 seizeUsd = (repayUsd * (BPS + config.liquidationBonusBps)) / BPS;
-        uint256 price = registry.priceE18(collateralAsset);
-        collateralSeized = (seizeUsd * (10 ** uint256(config.decimals))) / price;
-        if (collateralSeized > availableCollateral) collateralSeized = availableCollateral;
+        (repaid, collateralSeized) = _liquidationQuote(account, collateralAsset, requestedRepay);
 
         _safeTransferFrom(address(debtToken), msg.sender, address(this), repaid);
         debtToken.burn(address(this), repaid);
 
-        debtOf[account] = debt - repaid;
-        collateralOf[account][collateralAsset] = availableCollateral - collateralSeized;
+        debtOf[account] -= repaid;
+        collateralOf[account][collateralAsset] -= collateralSeized;
         _safeTransfer(collateralAsset, msg.sender, collateralSeized);
 
         emit Liquidated(msg.sender, account, collateralAsset, repaid, collateralSeized);
@@ -290,6 +270,32 @@ contract HashedCreditVault {
         uint256 debtUsd = debtUsdE18(account);
         if (debtUsd == 0) return type(uint256).max;
         return (liquidationCapacityUsdE18(account) * WAD) / debtUsd;
+    }
+
+    function _liquidationQuote(address account, address collateralAsset, uint256 requestedRepay)
+        internal
+        view
+        returns (uint256 repaid, uint256 collateralSeized)
+    {
+        CollateralConfig memory config = collateralConfig[collateralAsset];
+        if (!config.enabled) revert UnsupportedCollateral(collateralAsset);
+
+        uint256 availableCollateral = collateralOf[account][collateralAsset];
+        if (availableCollateral == 0) revert ZeroAmount();
+
+        uint256 debt = debtOf[account];
+        repaid = requestedRepay > debt ? debt : requestedRepay;
+
+        uint256 collateralValueUsd = _valueUsdE18(collateralAsset, availableCollateral, config.decimals);
+        uint256 maxRepayUsd = (collateralValueUsd * BPS) / (BPS + config.liquidationBonusBps);
+        uint256 maxRepayRaw = _fromUsdE18(maxRepayUsd);
+        if (repaid > maxRepayRaw) repaid = maxRepayRaw;
+        if (repaid == 0) revert ZeroAmount();
+
+        uint256 seizeUsd = (_debtUsdE18(repaid) * (BPS + config.liquidationBonusBps)) / BPS;
+        collateralSeized =
+            (seizeUsd * (10 ** uint256(config.decimals))) / registry.priceE18(collateralAsset);
+        if (collateralSeized > availableCollateral) collateralSeized = availableCollateral;
     }
 
     function _enforceBorrowLimit(address account) internal view {
