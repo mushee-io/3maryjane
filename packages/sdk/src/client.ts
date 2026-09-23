@@ -71,6 +71,7 @@ export interface CLClient {
   configurePolicy(account: Address, policy: RiskPolicy, adapters: readonly Address[]): Promise<Hex>;
   setAssetLimit(account: Address, asset: Address, maxAbsNetUsd: bigint): Promise<Hex>;
   setDefensiveOperator(account: Address, operator: Address, authorized?: boolean): Promise<Hex>;
+  depositToken(account: Address, asset: Address, amount: bigint): Promise<Hex>;
   withdraw(account: Address, asset: Address, to: Address, amount: bigint): Promise<Hex>;
   createIntent(input: CreateIntentInput): Promise<Hex>;
   approveToken(token: Address, spender: Address, amount: bigint): Promise<Hex>;
@@ -336,6 +337,15 @@ export function createCLClient(options: CreateCLClientOptions): CLClient {
         abi: clAccountAbi,
         functionName: "setDefensiveOperator",
         args: [operator, authorized],
+      });
+    },
+
+    async depositToken(account: Address, asset: Address, amount: bigint): Promise<Hex> {
+      return write(publicClient, walletClient, {
+        address: account,
+        abi: clAccountAbi,
+        functionName: "depositToken",
+        args: [asset, amount],
       });
     },
 
