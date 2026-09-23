@@ -31,6 +31,14 @@ const chain = configuredChainId === 143 ? monadMainnet : monadTestnet;
 const rpcUrl = import.meta.env.VITE_CL_RPC_URL as string | undefined;
 const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
 
+const hashedDeployment = {
+  vault: envAddress("VITE_HASHED_VAULT"),
+  adapter: envAddress("VITE_HASHED_ADAPTER"),
+  hUSD: envAddress("VITE_HASHED_USD"),
+  hNVDA: envAddress("VITE_HASHED_NVDA"),
+  hAAPL: envAddress("VITE_HASHED_AAPL"),
+};
+
 function envAddress(key: string): Address | undefined {
   const value = import.meta.env[key] as string | undefined;
   return value && isAddress(value) ? (getAddress(value) as Address) : undefined;
@@ -101,7 +109,7 @@ export default function App() {
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Connect a wallet, then load or create a deployed 3maryjane account.");
-  const [activeProduct, setActiveProduct] = useState<"clearing" | "mary-jane">("clearing");
+  const [activeProduct, setActiveProduct] = useState<"clearing" | "mary-jane" | "hashed">("clearing");
 
   const account = isAddress(accountInput) ? (getAddress(accountInput) as Address) : null;
   const coreConfigured = Boolean(deployment.accountFactory && deployment.adapterRegistry);
@@ -284,6 +292,13 @@ export default function App() {
           >
             MARY JANE <span>SOON</span>
           </button>
+          <button
+            className={activeProduct === "hashed" ? "active" : ""}
+            onClick={() => setActiveProduct("hashed")}
+            type="button"
+          >
+            HASHED <span>TESTNET</span>
+          </button>
         </nav>
         <div className="top-actions">
           <div className="network-dot"><span />{chain.name} · {chain.id}</div>
@@ -328,7 +343,7 @@ export default function App() {
               <h3>The frontend is live. The 3maryjane contracts are not connected yet.</h3>
               <p>
                 Wallet connection is working. Portfolio metrics, policy checks, solver output and execution only become live after the
-                3maryjane contracts are deployed and their addresses are added to Netlify.
+                3maryjane contracts are deployed and their addresses are added to the deployment environment.
               </p>
             </div>
             <div className="setup-status">
@@ -431,7 +446,7 @@ export default function App() {
           {txHash && <div className="tx mono">TX {txHash}</div>}
         </section>
           </div>
-        ) : (
+        ) : activeProduct === "mary-jane" ? (
           <div id="mary-jane" className="product-page mary-jane-page">
         <section className="mary-jane">
           <div className="mary-jane-head">
@@ -463,6 +478,8 @@ export default function App() {
           </div>
         </section>
           </div>
+        ) : (
+          <HashedPage />
         )}
       </main>
 
@@ -470,6 +487,90 @@ export default function App() {
         <span>3maryjane / MONAD</span>
         <span>NON-CUSTODIAL · CROSS-PROTOCOL · FAIL-CLOSED</span>
       </footer>
+    </div>
+  );
+}
+
+function HashedPage() {
+  const connected = Boolean(
+    hashedDeployment.vault &&
+    hashedDeployment.adapter &&
+    hashedDeployment.hUSD &&
+    hashedDeployment.hNVDA &&
+    hashedDeployment.hAAPL
+  );
+
+  const deploymentRows = [
+    ["CREDIT VAULT", hashedDeployment.vault],
+    ["3MARYJANE ADAPTER", hashedDeployment.adapter],
+    ["CREDIT UNIT", hashedDeployment.hUSD],
+    ["DEMO hNVDA", hashedDeployment.hNVDA],
+    ["DEMO hAAPL", hashedDeployment.hAAPL],
+  ] as const;
+
+  return (
+    <div id="hashed" className="product-page hashed-page">
+      <section className="hashed-hero">
+        <div>
+          <p className="kicker">3maryjane / HASHED</p>
+          <h2>Lock equity.<br />Borrow liquidity.<br /><span>Keep your exposure.</span></h2>
+        </div>
+        <div className="hashed-status-card">
+          <small>MONAD TESTNET</small>
+          <strong>{connected ? "CONNECTED" : "PROTOCOL READY"}</strong>
+          <p>
+            Hashed is the stock-backed credit module for 3maryjane. Tokenized-equity collateral
+            becomes a programmable credit line while the clearing engine continues to see the debt
+            and collateral as one portfolio.
+          </p>
+        </div>
+      </section>
+
+      <section className="hashed-stat-grid">
+        <div><small>COLLATERAL</small><strong>hNVDA / hAAPL</strong><span>synthetic testnet equities</span></div>
+        <div><small>CREDIT</small><strong>hUSD</strong><span>6-decimal testnet credit unit</span></div>
+        <div><small>INITIAL LTV</small><strong>60–65%</strong><span>asset-specific borrow power</span></div>
+        <div><small>LIQUIDATION</small><strong>75–78%</strong><span>5% liquidation incentive</span></div>
+      </section>
+
+      <section className="two-col hashed-columns">
+        <div className="panel">
+          <div className="panel-title"><span>H01</span> CREDIT FLOW</div>
+          <div className="hashed-steps">
+            <div><span>01</span><strong>LOCK EQUITY</strong><small>Deposit supported tokenized-equity collateral into the Hashed vault.</small></div>
+            <div><span>02</span><strong>BORROW hUSD</strong><small>Mint credit up to the asset-specific LTV without selling the collateral.</small></div>
+            <div><span>03</span><strong>CLEAR THE POSITION</strong><small>HashedAdapter sends collateral and debt into the existing 3maryjane risk engine.</small></div>
+            <div><span>04</span><strong>DEFEND OR LIQUIDATE</strong><small>Health falls with collateral value; unsafe positions become liquidatable onchain.</small></div>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-title"><span>H02</span> TESTNET DEPLOYMENT</div>
+          <div className="hashed-deployment">
+            {deploymentRows.map(([label, address]) => (
+              <div key={label}>
+                <span>{label}</span>
+                <strong className="mono">{address ? short(address) : "pending deployment"}</strong>
+              </div>
+            ))}
+          </div>
+          <p className="hashed-note">
+            The demo equity tokens and manual prices are testnet-only. They are not real shares and
+            are not production oracle infrastructure.
+          </p>
+        </div>
+      </section>
+
+      <section className="hashed-thesis">
+        <div className="panel-title"><span>H03</span> WHY HASHED EXISTS</div>
+        <h3>Credit should understand the portfolio it is lending against.</h3>
+        <p>
+          A normal lending market sees collateral in isolation. Hashed is built inside 3maryjane:
+          its collateral and debt normalize into the same clearing layer that already tracks
+          cross-protocol exposure. The first market is equity-backed credit; the architecture can
+          later extend to verified real-world-asset collateral without changing the clearing model.
+        </p>
+      </section>
     </div>
   );
 }
