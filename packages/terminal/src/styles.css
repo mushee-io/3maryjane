@@ -344,3 +344,284 @@ footer { display: flex; justify-content: space-between; padding: 26px 28px; font
   .hashed-stat-grid > div:nth-child(2) { border-right: 0; padding-left: 0; }
   .hashed-deployment > div { flex-direction: column; gap: 7px; }
 }
+
+
+/* Hashed live testnet console */
+.hashed-console {
+  padding: 34px 0 38px;
+  border-bottom: 1px solid #2b2b2b;
+}
+.hashed-console-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 28px;
+  align-items: end;
+  margin-bottom: 26px;
+}
+.hashed-console-head .panel-title { margin-bottom: 12px; }
+.hashed-console-head h3 {
+  margin: 0;
+  max-width: 760px;
+  font-size: clamp(30px, 4.3vw, 64px);
+  line-height: .94;
+  letter-spacing: -.055em;
+  font-weight: 620;
+}
+.hashed-wallet {
+  min-width: 270px;
+  padding: 16px;
+  border: 1px solid #2f2f2f;
+  background: #080808;
+}
+.hashed-wallet small {
+  display: block;
+  color: #666;
+  font-size: 8px;
+  letter-spacing: .14em;
+  font-weight: 800;
+}
+.hashed-wallet strong {
+  display: block;
+  margin: 8px 0 13px;
+  font-size: 11px;
+}
+.hashed-wallet .button { width: 100%; }
+.hashed-live-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: #2a2a2a;
+  border: 1px solid #2a2a2a;
+}
+.hashed-asset-card {
+  padding: 22px;
+  background: #080808;
+}
+.hashed-asset-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+.hashed-asset-top small {
+  display: block;
+  color: #666;
+  font-size: 8px;
+  letter-spacing: .14em;
+  font-weight: 800;
+}
+.hashed-asset-top strong {
+  display: block;
+  margin-top: 9px;
+  font-size: clamp(28px, 3vw, 44px);
+  letter-spacing: -.05em;
+}
+.hashed-asset-top span {
+  display: block;
+  margin-top: 5px;
+  color: #747474;
+  font-size: 10px;
+}
+.hashed-balance-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 22px;
+  border-top: 1px solid #242424;
+}
+.hashed-balance-row span {
+  padding-top: 14px;
+  color: #666;
+  font-size: 8px;
+  letter-spacing: .12em;
+}
+.hashed-balance-row span + span {
+  padding-left: 16px;
+  border-left: 1px solid #242424;
+}
+.hashed-balance-row strong {
+  display: block;
+  margin-top: 5px;
+  color: #ddd;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+.hashed-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr .9fr;
+  gap: 1px;
+  margin-top: 1px;
+  background: #2a2a2a;
+  border: 1px solid #2a2a2a;
+  border-top: 0;
+}
+.hashed-action-box,
+.hashed-position-box {
+  min-width: 0;
+  padding: 22px;
+  background: #080808;
+}
+.hashed-action-label {
+  margin-bottom: 18px;
+  color: #aaa;
+  font-size: 9px;
+  letter-spacing: .13em;
+  font-weight: 800;
+}
+.hashed-action-label span {
+  margin-right: 9px;
+  color: #4f4f4f;
+}
+.hashed-asset-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin-bottom: 16px;
+  background: #333;
+  border: 1px solid #333;
+}
+.hashed-asset-switch button {
+  border: 0;
+  padding: 11px;
+  background: #0b0b0b;
+  color: #777;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+.hashed-asset-switch button.active {
+  background: #f0f0ed;
+  color: #050505;
+}
+.hashed-action-box label {
+  display: block;
+  color: #666;
+  font-size: 8px;
+  letter-spacing: .13em;
+  font-weight: 800;
+}
+.hashed-action-box input { margin-top: 8px; }
+.hashed-credit-symbol {
+  height: 39px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  color: #e4e4e0;
+  font-size: 28px;
+  letter-spacing: -.04em;
+  font-weight: 650;
+}
+.hashed-mini-state {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  color: #686868;
+  font-size: 8px;
+  letter-spacing: .08em;
+}
+.hashed-action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 18px;
+}
+.hashed-risk-readout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: #242424;
+  border: 1px solid #242424;
+}
+.hashed-risk-readout > div {
+  min-width: 0;
+  padding: 14px;
+  background: #0b0b0b;
+}
+.hashed-risk-readout small {
+  display: block;
+  margin-bottom: 7px;
+  color: #666;
+  font-size: 7px;
+  letter-spacing: .1em;
+}
+.hashed-risk-readout strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 15px;
+  letter-spacing: -.025em;
+}
+.hashed-risk-readout strong.good { color: #e7e7e2; }
+.hashed-risk-readout strong.warning { color: #d7cba2; }
+.hashed-risk-readout strong.danger { color: #ff9696; }
+.hashed-position-box p {
+  margin: 16px 0 0;
+  color: #6e6e6e;
+  font-size: 10px;
+  line-height: 1.55;
+}
+.hashed-console-status {
+  min-height: 48px;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid #252525;
+  color: #8a8a8a;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.hashed-console-status strong {
+  color: #666;
+  font-size: 9px;
+}
+.hashed-console-status .pulse::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  display: inline-block;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #f0f0ed;
+  box-shadow: 0 0 14px rgba(255,255,255,.5);
+}
+.hashed-demo-note {
+  max-width: 980px;
+  margin: 16px 0 0;
+  color: #626262;
+  font-size: 10px;
+  line-height: 1.65;
+}
+.hashed-health.good { box-shadow: inset 0 -2px 0 #7b7b76; }
+.hashed-health.warning { box-shadow: inset 0 -2px 0 #8c8060; }
+.hashed-health.danger { box-shadow: inset 0 -2px 0 #9c5656; }
+
+@media (max-width: 1100px) {
+  .hashed-action-grid { grid-template-columns: 1fr 1fr; }
+  .hashed-position-box { grid-column: 1 / -1; }
+}
+
+@media (max-width: 800px) {
+  .hashed-console-head,
+  .hashed-live-grid,
+  .hashed-action-grid { grid-template-columns: 1fr; }
+  .hashed-wallet { min-width: 0; }
+  .hashed-position-box { grid-column: auto; }
+}
+
+@media (max-width: 650px) {
+  .hashed-console-head h3 { font-size: 40px; }
+  .hashed-asset-top { flex-direction: column; }
+  .hashed-asset-top .button { width: 100%; }
+  .hashed-balance-row { grid-template-columns: 1fr; }
+  .hashed-balance-row span + span {
+    margin-top: 10px;
+    padding-left: 0;
+    padding-top: 10px;
+    border-left: 0;
+    border-top: 1px solid #242424;
+  }
+  .hashed-action-buttons { grid-template-columns: 1fr; }
+  .hashed-console-status { align-items: flex-start; flex-direction: column; }
+}
