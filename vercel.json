@@ -2,5 +2,22 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm install --ignore-scripts",
   "buildCommand": "npm --workspace @cl-monad/terminal run build",
-  "outputDirectory": "packages/terminal/dist"
+  "outputDirectory": "packages/terminal/dist",
+  "redirects": [
+    {
+      "source": "/home.html",
+      "destination": "/",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/app",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/app/:path*",
+      "destination": "/index.html"
+    }
+  ]
 }
