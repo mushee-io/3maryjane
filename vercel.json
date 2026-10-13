@@ -5,10 +5,6 @@
   "outputDirectory": "packages/terminal/dist",
   "rewrites": [
     {
-      "source": "/",
-      "destination": "/home.html"
-    },
-    {
       "source": "/app",
       "destination": "/index.html"
     },
