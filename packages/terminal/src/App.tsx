@@ -179,7 +179,9 @@ export default function App() {
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Connect a wallet, then load or create a deployed 3maryjane account.");
-  const [activeProduct, setActiveProduct] = useState<"clearing" | "hashed">("clearing");
+  const [activeProduct, setActiveProduct] = useState<"clearing" | "hashed">(
+    () => new URLSearchParams(window.location.search).get("product") === "hashed" ? "hashed" : "clearing"
+  );
 
   const account = isAddress(accountInput) ? (getAddress(accountInput) as Address) : null;
   const coreConfigured = Boolean(deployment.accountFactory && deployment.adapterRegistry);

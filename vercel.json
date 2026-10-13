@@ -3,14 +3,11 @@
   "installCommand": "npm install --ignore-scripts",
   "buildCommand": "npm --workspace @cl-monad/terminal run build",
   "outputDirectory": "packages/terminal/dist",
-  "redirects": [
-    {
-      "source": "/home.html",
-      "destination": "/",
-      "permanent": false
-    }
-  ],
   "rewrites": [
+    {
+      "source": "/",
+      "destination": "/home.html"
+    },
     {
       "source": "/app",
       "destination": "/index.html"
