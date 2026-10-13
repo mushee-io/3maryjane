@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles.css";
+import "./app-design.css";
 
 if (window.location.pathname === "/" || window.location.pathname === "/index.html") {
   window.location.replace("/home.html" + window.location.search + window.location.hash);

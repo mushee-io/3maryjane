@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { AppNavigation, ProductIntro } from "./AppDesign";
 import {
   createPublicClient,
   createWalletClient,
@@ -345,39 +346,19 @@ export default function App() {
 
   return (
     <div className="shell">
-      <header className="topbar">
-        <div className="brand-lockup">
-          <div className="eyebrow">MONAD / CAPITAL + CLEARING</div>
-          <h1>3maryjane</h1>
-        </div>
-        <nav className="product-nav" aria-label="Product">
-          <button
-            className={activeProduct === "clearing" ? "active" : ""}
-            onClick={() => setActiveProduct("clearing")}
-            type="button"
-          >
-            CLEARING
-          </button>
-          <button
-            className={activeProduct === "hashed" ? "active" : ""}
-            onClick={() => setActiveProduct("hashed")}
-            type="button"
-          >
-            HASHED <span>TESTNET</span>
-          </button>
-        </nav>
-        <div className="top-actions">
-          <div className="network-dot"><span />{chain.name} · {chain.id}</div>
-          <button className="button secondary" onClick={connectWallet}>
-            {walletAddress ? short(walletAddress) : "CONNECT WALLET"}
-          </button>
-        </div>
-      </header>
+      <AppNavigation
+        activeProduct={activeProduct}
+        setActiveProduct={setActiveProduct}
+        connectWallet={connectWallet}
+        walletLabel={walletAddress ? short(walletAddress) : "Connect wallet"}
+        network={chain.name + " · " + chain.id}
+      />
 
       <main>
         {activeProduct === "clearing" ? (
           <div id="clearing" className="product-page clearing-page">
-        <section className="hero-grid">
+        <ProductIntro product="clearing" />
+<section className="hero-grid" id="account-console">
           <div>
             <p className="kicker">3maryjane / CLEARING ENGINE</p>
             <h2>One account.<br />Every market.<br /><span>One risk layer.</span></h2>
@@ -421,7 +402,7 @@ export default function App() {
           </section>
         )}
 
-        <section className="metrics-grid">
+        <section className="metrics-grid" id="portfolio-console">
           <Metric label="EQUITY" value={usd(metrics?.equityUsd)} />
           <Metric label="GROSS EXPOSURE" value={usd(metrics?.grossExposureUsd)} />
           <Metric label="NET DIRECTIONAL" value={usd(metrics?.directionalExposureUsd)} />
@@ -1009,7 +990,8 @@ function HashedPage({
 
   return (
     <div id="hashed" className="product-page hashed-page">
-      <section className="hashed-hero">
+      <ProductIntro product="hashed" />
+<section className="hashed-hero">
         <div>
           <p className="kicker">3maryjane / HASHED</p>
           <h2>Lock equity.<br />Borrow liquidity.<br /><span>Keep your exposure.</span></h2>
@@ -1032,7 +1014,7 @@ function HashedPage({
         <div className={"hashed-health " + healthClass}><small>HEALTH FACTOR</small><strong>{ratio(state?.healthFactorE18)}</strong><span>liquidation below 1.00×</span></div>
       </section>
 
-      <section className="panel hashed-console">
+      <section className="panel hashed-console" id="credit-console">
         <div className="hashed-console-head">
           <div>
             <div className="panel-title"><span>H01</span> LIVE TESTNET CONSOLE</div>
@@ -1138,7 +1120,7 @@ function HashedPage({
         </p>
       </section>
 
-      <section className="panel hashed-clearing-demo">
+      <section className="panel hashed-clearing-demo" id="unified-clearing">
         <div className="hashed-clearing-head">
           <div>
             <div className="panel-title"><span>H02</span> UNIFIED CLEARING DEMO</div>
